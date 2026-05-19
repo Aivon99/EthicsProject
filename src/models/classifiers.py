@@ -15,6 +15,8 @@ logger = get_logger(__name__)
 
 
 class LogisticRegressionClassifier:
+    """simple log. regression classifier"""
+
     name = "logistic_regression"
 
     def __init__(self, max_iter=1000, C=1.0, random_state=42):
@@ -33,6 +35,8 @@ class LogisticRegressionClassifier:
 
 
 class XGBoostClassifier:
+    """ XGBoost classifier, some def values for safety, basically wrapper fo xgboost API """
+    
     name = "xgboost"
 
     def __init__(self, n_estimators=200, max_depth=4, learning_rate=0.05, random_state=42):
@@ -53,6 +57,7 @@ class XGBoostClassifier:
         return self._model.predict_proba(X)
 
 class ShallowNNClassifier:
+    """Shallow NNclass implemtation in pytorch, with some regularizationand def. values"""
     name = "shallow_nn"
 
     def __init__(self, hidden_dims=None, dropout=0.2, epochs=50, batch_size=64, lr=1e-3, random_state=42):
@@ -61,7 +66,7 @@ class ShallowNNClassifier:
         self.epochs = epochs
         self.batch_size = batch_size
         self.lr = lr
-        self.random_state = random_state
+        self.random_state = random_state #To be set from config.  
         self._net = None
 
     def _build_net(self, n_features):
@@ -74,13 +79,17 @@ class ShallowNNClassifier:
 
     def fit(self, X, y):
         torch.manual_seed(self.random_state)
+
         X_t = torch.tensor(X.values, dtype=torch.float32)
         y_t = torch.tensor(y.values, dtype=torch.float32).unsqueeze(1)
         self._net = self._build_net(X_t.shape[1])
-        opt = torch.optim.Adam(self._net.parameters(), lr=self.lr)
+        
+        opt = torch.optim.Adam(self._net.parameters(), lr=self.lr) #NOTE ADAM OPTIMIZER
+        
         loss_fn = nn.BCEWithLogitsLoss()
         loader = DataLoader(TensorDataset(X_t, y_t), batch_size=self.batch_size, shuffle=True)
         self._net.train()
+
         for i in range(self.epochs):
             for xb, yb in loader:
                 opt.zero_grad()
@@ -90,6 +99,7 @@ class ShallowNNClassifier:
 
     def predict_proba(self, X):
         self._net.eval()
+
         with torch.no_grad():
             X_t = torch.tensor(X.values, dtype=torch.float32)
             probs = torch.sigmoid(self._net(X_t).squeeze(1)).numpy()
@@ -97,5 +107,6 @@ class ShallowNNClassifier:
 
 
     def predict(self, X):
+        #Over threshold
         return (self.predict_proba(X)[:, 1] >= 0.5).astype(int)
     
