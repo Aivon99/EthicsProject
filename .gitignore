@@ -1,1 +1,15 @@
 students-dataset/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+.eggs/
+*.whl
+
+
+*.log
+logs/
+
