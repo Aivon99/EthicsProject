@@ -43,19 +43,81 @@ def load_split(path) -> DataSplit:
     return split
 
 
+
+
 class Preprocessor:
     def __init__(self, config: dict | None = None) -> None:
-        pass
+        self.cfg = config or load_config()
+        self._ds_cfg = self.cfg["dataset"]
+        self.target_col = self._ds_cfg.get("target_column")
+        self.protected_attrs = self._ds_cfg.get("protected_attrs", [])
+        self.test_size = self._ds_cfg.get("test_size", 0.20)
+        self.random_seed = self._ds_cfg.get("random_seed", 42)
+        self._encoders: dict[str, LabelEncoder] = {}
+        self._scaler: StandardScaler = None
+        self._feature_names = []
+
     def fit_transform(self, df) -> DataSplit:
-        pass
+        df = df.copy()
+        df = self._drop_duplicates(df)
+        df = self._infer_and_validate_columns(df)
+        df = self._encode_categoricals(df, fit=True)
+
+        X, y, protected = self._split_xy(df)
+
+        X_train, X_test, y_train, y_test, prot_train, prot_test = train_test_split(X, y, protected, test_size=self.test_size,
+            random_state=self.random_seed,
+            stratify=y,
+        )
+
+        X_train, X_test = self._scale(X_train, X_test, fit=True)
+        split = DataSplit(
+            X_train=X_train,
+            X_test=X_test,
+            y_train=y_train,
+            y_test=y_test,
+            protected_train=prot_train.reset_index(drop=True),
+            protected_test=prot_test.reset_index(drop=True),
+            feature_names=self._feature_names,
+            target_name=self.target_col,
+            protected_attrs=self.protected_attrs,
+            encoders=self._encoders,
+            scaler=self._scaler,
+        )
+
+
+        logger.info( # WE gotta log it up (in we gotta pump it up rhythm)
+            f"Split: {len(X_train):,} train / {len(X_test):,} test rows "
+            f"| {len(self._feature_names)} features."
+        )
+        
+        return split
+    
+
     def transform(self, df):
-        pass
+        if not self._encoders and self._scaler is None:
+            raise RuntimeError("Preprocessor has not been fitted yet.")
+        df = df.copy()
+        df = self._encode_categoricals(df, fit=False)
+        X, _, _ = self._split_xy(df)
+        X_scaled, _ = self._scale(X, X, fit=False)
+        return X_scaled
+    
     def save(self, path):
-        pass
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "wb") as f:
+            pickle.dump(self, f)
+        logger.info(f"Preprocessor saved to {path}.")
+
 
     @classmethod
     def load(cls, path) -> "Preprocessor":
-        pass
+        with open(path, "rb") as f:
+        obj = pickle.load(f)
+        logger.info(f"Preprocessor loaded from {path}.")
+        return obj
+
     
     def _drop_duplicates(self, df):
         before = len(df)
@@ -80,8 +142,6 @@ class Preprocessor:
                     raise KeyError(f"no fitted encoder for column '{col}'.")
                 df[col] = le.transform(df[col].astype(str))
         return df
-
-
 
 
     def _split_xy(self, df) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
