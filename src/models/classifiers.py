@@ -71,3 +71,31 @@ class ShallowNNClassifier:
             layers += [nn.Linear(in_d, out_d), nn.ReLU(), nn.Dropout(self.dropout)]
         layers.append(nn.Linear(dims[-1], 1))
         return nn.Sequential(*layers)
+
+    def fit(self, X, y):
+        torch.manual_seed(self.random_state)
+        X_t = torch.tensor(X.values, dtype=torch.float32)
+        y_t = torch.tensor(y.values, dtype=torch.float32).unsqueeze(1)
+        self._net = self._build_net(X_t.shape[1])
+        opt = torch.optim.Adam(self._net.parameters(), lr=self.lr)
+        loss_fn = nn.BCEWithLogitsLoss()
+        loader = DataLoader(TensorDataset(X_t, y_t), batch_size=self.batch_size, shuffle=True)
+        self._net.train()
+        for i in range(self.epochs):
+            for xb, yb in loader:
+                opt.zero_grad()
+                loss_fn(self._net(xb), yb).backward()
+                opt.step()
+        return self
+
+    def predict_proba(self, X):
+        self._net.eval()
+        with torch.no_grad():
+            X_t = torch.tensor(X.values, dtype=torch.float32)
+            probs = torch.sigmoid(self._net(X_t).squeeze(1)).numpy()
+        return np.stack([1 - probs, probs], axis=1)
+
+
+    def predict(self, X):
+        return (self.predict_proba(X)[:, 1] >= 0.5).astype(int)
+    
