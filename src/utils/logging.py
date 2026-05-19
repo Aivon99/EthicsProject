@@ -20,5 +20,10 @@ def get_logger(name: str, level: int = logging.INFO, log_file: Path | None = Non
     ch.setFormatter(fmt)
     logger.addHandler(ch)
 
-    
+    if log_file is not None:
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        fh = logging.FileHandler(log_file)
+        fh.setFormatter(fmt)
+        logger.addHandler(fh)
+
     return logger
