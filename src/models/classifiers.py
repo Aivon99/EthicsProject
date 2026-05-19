@@ -1,6 +1,11 @@
 from __future__ import annotations
 import numpy as np
 import pandas as pd
+
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader, TensorDataset
+
 from sklearn.linear_model import LogisticRegression
 from xgboost import XGBClassifier
 
@@ -47,3 +52,22 @@ class XGBoostClassifier:
     def predict_proba(self, X):
         return self._model.predict_proba(X)
 
+class ShallowNNClassifier:
+    name = "shallow_nn"
+
+    def __init__(self, hidden_dims=None, dropout=0.2, epochs=50, batch_size=64, lr=1e-3, random_state=42):
+        self.hidden_dims = hidden_dims or [64, 32]
+        self.dropout = dropout
+        self.epochs = epochs
+        self.batch_size = batch_size
+        self.lr = lr
+        self.random_state = random_state
+        self._net = None
+
+    def _build_net(self, n_features):
+        dims = [n_features] + self.hidden_dims
+        layers = []
+        for in_d, out_d in zip(dims[:-1], dims[1:]):
+            layers += [nn.Linear(in_d, out_d), nn.ReLU(), nn.Dropout(self.dropout)]
+        layers.append(nn.Linear(dims[-1], 1))
+        return nn.Sequential(*layers)
