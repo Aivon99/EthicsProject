@@ -1,0 +1,20 @@
+paths:
+  raw_data:       stub/
+  processed_data: stub/
+  synthetic_dir:  stub/
+  results_dir:    stub/
+
+
+
+
+
+generic:
+  random_seed:      42 #my fav
+
+
+evaluation:
+  utility_metrics:
+    - stub
+  fairness_metrics:
+    - stub
+    
