@@ -108,14 +108,17 @@ class Preprocessor:
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "wb") as f:
             pickle.dump(self, f)
+        
         logger.info(f"Preprocessor saved to {path}.")
 
 
     @classmethod
     def load(cls, path) -> "Preprocessor":
         with open(path, "rb") as f:
-        obj = pickle.load(f)
+            obj = pickle.load(f)
+        
         logger.info(f"Preprocessor loaded from {path}.")
+        
         return obj
 
     

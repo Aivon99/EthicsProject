@@ -1,8 +1,9 @@
 paths:
-  raw_data:       stub/
-  processed_data: stub/
-  synthetic_dir:  stub/
-  results_dir:    stub/
+  raw_data:       Data/original.csv
+  processed_data: Data/processed.csv
+  
+  synthetic_dir:  Data/synthetic/
+  results_dir:    Data/results/
 
 
 
