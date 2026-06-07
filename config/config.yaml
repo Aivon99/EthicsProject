@@ -1,7 +1,9 @@
 paths:
   raw_data:       Data/original.csv
   processed_data: Data/processed.csv
-  
+  train_data:     Data/train.csv
+  test_data:      Data/test.csv
+
   synthetic_dir:  Data/synthetic/
   results_dir:    Data/results/
 

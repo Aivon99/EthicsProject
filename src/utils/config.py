@@ -7,36 +7,26 @@ from typing import Any
 
 
 
-# ---- Public functions --------------------------------------------------------
-def load_config(config_path: str | os.PathLike) -> dict[str, Any]:
-    """
-    Load the YAML configuration file and resolve relative paths.
 
-    Parameters
-    ----------
-    config_path : str or Path
-        Explicit path to config.yaml.
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_DEFAULT_CONFIG = _PROJECT_ROOT / "config" / "config.yaml"
 
-    Returns
-    -------
-    dict
-        Fully resolved configuration dictionary.  All values under the
-        ``paths`` key are ``pathlib.Path`` objects pointing at real
-        (or future) filesystem locations.
-    """
-    resolved_config_path = Path(config_path).resolve()
-    project_root = resolved_config_path.parent.parent
 
-    with open(resolved_config_path, "r", encoding="utf-8") as fh:
-        cfg = yaml.safe_load(fh)
 
-    # Store the resolved project root for downstream use
-    cfg["project_root"] = project_root
 
-    # Resolve all path strings to absolute Path objects
-    cfg["paths"] = _resolve_paths(cfg.get("paths", {}), project_root)
+def load_config(path = None):
+    config_path = Path(path) if path else _DEFAULT_CONFIG
+    if not config_path.exists():
+        raise FileNotFoundError("config file not found")
+
+    with open(config_path, "r") as f:
+        cfg: dict[str, Any] = yaml.safe_load(f)
+
+    for key, value in cfg.get("paths", {}).items():
+        cfg["paths"][key] = _PROJECT_ROOT / value
 
     return cfg
+
 
 
 def get_synthetic_output_path(cfg: dict, method: str) -> Path:

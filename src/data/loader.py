@@ -6,9 +6,8 @@ import pandas as pd
 import numpy as np
 import sys 
 
-from src.utils import get_logger, load_config
+#from src.utils import  load_config
 
-logger = get_logger(__name__)
 
 def load_data(file_path):
     """Load data from a CSV file."""
