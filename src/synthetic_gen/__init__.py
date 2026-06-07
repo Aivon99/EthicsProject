@@ -1,1 +1,0 @@
-# src/synthetic_gen/__init__.py
