@@ -3,6 +3,7 @@ paths:
   # Reference dataset directory
   # (from Aequitas collection on Zenodo: https://zenodo.org/records/17592007)
   student_dataset_dir: student-dataset
+  raw_data: Data/original.csv  # working copy of the original Aequitas dataset
 
   # Goal 1 output: the preprocessed dataset used as input for Goal 2.
   train_data: students-dataset/mock_final.csv   # <- TODO: swap to results/processed/train.csv after Goal 1
