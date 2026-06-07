@@ -1,21 +1,105 @@
+# ---- Paths -------------------------------------------------------------------
 paths:
-  raw_data:       Data/original.csv
-  processed_data: Data/processed.csv
-  train_data:     Data/train.csv
-  test_data:      Data/test.csv
+  # Reference dataset directory
+  # (from Aequitas collection on Zenodo: https://zenodo.org/records/17592007)
+  student_dataset_dir: student-dataset
 
-  synthetic_dir:  Data/synthetic/
-  results_dir:    Data/results/
+  # Goal 1 output: the preprocessed dataset used as input for Goal 2.
+  train_data: students-dataset/mock_final.csv   # <- TODO: swap to results/processed/train.csv after Goal 1
+  test_data:  students-dataset/mock_final.csv   # <- TODO: swap to results/processed/test.csv  after Goal 1
+
+  results_dir:   results
+  processed_dir: results/processed  # <- TODO: to move here (Data/processed.csv, Data/original.csv)
+  figures_dir:   results/figures
+  synthetic_dir: results/synthetic
+
+# ---- Reproducibility ---------------------------------------------------------
+seed: 42  # my fav
+
+# ---- Target variable ---------------------------------------------------------
+target:
+  score_column:  score_MAT         # continuous score used to build the target
+  percentile:    75                # positive class: score >= this percentile
+  column_name:   target_high_perf  # name of the binary column
+
+# ---- Dataset schema ----------------------------------------------------------
+dataset:
+  # Target column (must match target.column_name above)
+  target_column: target_high_perf
+
+  # Performance score columns
+  performance_columns:
+    - score_MAT
+    - level_MAT
+    - score_LEN
+    - level_LEN
+    - score_ING
+    - level_ING
+
+  # Protected attribute columns (circumstances C1-C12 from Marrero et. al.)
+  protected_attributes:
+    - s_gender                                           # C1
+    - s_birth_country                                    # C6 - proxy for immigrant status
+    - f_mother_education_level                           # C2
+    - f_father_education_level                           # C3
+    - f_mother_occupation                                # C4
+    - f_father_occupation                                # C5
+    - f_extent_of_books_at_home                          # C8
+    - f_frequency_of_see_adult_read                      # C9
+    - p_public_or_private                                # C10
+    - p_island                                           # C11
+    - p_percentage_of_teachers_changed_school_last_year  # C12
+    - f_ESCS                                             # C13 - socioeconomic composite
 
 
+  # Columns that are purely administrative identifiers
+  id_columns:
+    - id_questionnaire
+    - id_student_original
+    - id_year
+    - id_grade
+    - id_school
+    - id_student_16_19
+    - id_school_16_19
 
-generic:
-  random_seed:      42 #my fav
+  # Columns that are categorical
+  categorical_columns:
+    - s_gender
+    - s_birth_country
+    - f_frequency_of_see_adult_read
+    - p_public_or_private
+    - p_island
 
+# ---- Synthetic generation ----------------------------------------------------
+generation:
+  # How many synthetic rows to produce per method
+  n_synthetic_samples: null  # default: null => match the size of the training set
 
-evaluation:
-  utility_metrics:
-    - stub
-  fairness_metrics:
-    - stub
-    
+  # Methods to run
+  methods:
+    ctgan:
+      enabled:     true
+      epochs:      300
+      batch_size:  500
+
+    tvae:
+      enabled:     true
+      epochs:      300
+      batch_size:  500
+
+    gaussian_copula:
+      enabled:     true
+
+    smote:
+      enabled:     true
+      k_neighbors: 5
+
+  # Sub-directory names under paths.synthetic_dir
+  output_subdirs:
+    ctgan:            ctgan
+    tvae:             tvae
+    gaussian_copula:  copula
+    smote:            smote
+
+  # File name template
+  output_filename_template: "synthetic_{method}.csv"
