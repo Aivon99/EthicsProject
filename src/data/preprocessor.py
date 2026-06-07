@@ -316,6 +316,112 @@ def bin_escs(series):
     return pd.cut(series, bins=ESCS_BINS, labels=ESCS_LABELS)
 
 
+# ── Main pipeline ──────────────────────────────────────────────────────────────
+
+def preprocess(
+    df: pd.DataFrame,
+    target_col: str = "level_MAT",
+    nan_threshold: float = DEFAULT_NAN_THRESHOLD,
+    drop_other_scores: bool = True,
+) -> tuple[pd.DataFrame, pd.Series, pd.Series]:
+    """
+    Preprocess original.csv into (X, y, sensitive).
+
+    Steps
+    -----
+    1.  Drop identifiers, availability flags, redundant cols
+    2.  Drop rows with >90% NaN
+    3.  Family questionnaire aggregations
+    4.  Teacher questionnaire aggregations
+    5.  Drop aggregated source cols + functional deps
+    6.  Rename cols to readable names
+    7.  Recode categorical integers to strings
+    8.  Normalize extent_of_* / frequency_of_* to [0,1]
+    9.  Drop columns above NaN threshold
+    10. Extract target and sensitive attribute
+    """
+    logger.info(f"Input shape: {df.shape}")
+    df = df.copy()
+
+    # 1. Structural drops
+    logger.info("Step 1: structural drops")
+    df = _drop_if_present(df, IDENTIFIER_COLS,   "identifier")
+    df = _drop_if_present(df, AVAILABILITY_COLS, "availability-flag")
+    df = _drop_if_present(df, REDUNDANT_COLS,    "redundant")
+
+    # 2. Drop rows with >90% missing
+    logger.info("Step 2: row-level NaN filter")
+    row_nan_frac = df.isna().mean(axis=1)
+    n_before = len(df)
+    df = df[row_nan_frac <= 0.9]
+    logger.info(f"  Dropped {n_before - len(df)} rows with >90% NaN")
+
+    # 3. Family aggregations
+    logger.info("Step 3: family aggregations")
+    df = _aggregate_mean(df, FAMILY_AGG_MEAN)
+    df = _drop_if_present(df, FAMILY_AGG_DROP, "family-agg-source")
+
+    # 4. Teacher aggregations
+    logger.info("Step 4: teacher aggregations")
+    # rescale inconsistent scale cols before aggregating
+    for col in ["p331g", "p331j"]:
+        if col in df.columns:
+            df[col] = _normalize_col(df[col], old_min=1, old_max=5, new_min=1, new_max=4)
+    df = _aggregate_mean(df, TEACHER_AGG_MEAN)
+    df = _aggregate_sum(df,  TEACHER_AGG_SUM)
+    df = _drop_if_present(df, TEACHER_DROP, "teacher-agg-source/dep")
+    # drop whichever of p5/rep has more NaNs
+    if "p5" in df.columns and "rep" in df.columns:
+        drop_col = "p5" if df["p5"].isna().sum() > df["rep"].isna().sum() else "rep"
+        df = df.drop(columns=[drop_col])
+        logger.info(f"  Dropped redundant repeater col: {drop_col}")
+
+    # 5. Rename
+    logger.info("Step 5: renaming columns")
+    df = df.rename(columns={k: v for k, v in RENAME_MAP.items() if k in df.columns})
+
+    # 6. Recode categoricals
+    logger.info("Step 6: recoding categoricals")
+    for col, mapping in RECODE_MAP.items():
+        if col in df.columns:
+            df[col] = df[col].map(lambda x: mapping.get(x, np.nan) if pd.notna(x) else np.nan)
+
+    # boolean cols
+    for col in ["f_has_been_recommended_school", "t_enrolled_in_school_training_plan"]:
+        if col in df.columns:
+            df[col] = df[col].apply(lambda x: False if x == 2 else (True if x == 1 else np.nan))
+
+    # 7. Normalize extent/frequency cols
+    logger.info("Step 7: normalizing extent/frequency columns")
+    df = _normalize_extent_frequency_cols(df)
+
+    # 8. Drop high-NaN columns
+    logger.info(f"Step 8: dropping columns above {nan_threshold:.0%} NaN threshold")
+    nan_fracs = nan_summary(df)["nan_fraction"]
+    high_nan  = nan_fracs[nan_fracs > nan_threshold].index.tolist()
+    logger.info(f"  Dropping {len(high_nan)} columns")
+    df = _drop_if_present(df, high_nan, "high-NaN")
+
+    # 9. Extract target
+    if target_col not in df.columns:
+        raise ValueError(f"Target '{target_col}' not found. Available score cols: {[c for c in ALL_SCORE_COLS if c in df.columns]}")
+    y  = df[target_col].copy()
+    df = df.drop(columns=[target_col])
+
+    if drop_other_scores:
+        df = _drop_if_present(df, [c for c in ALL_SCORE_COLS if c != target_col], "score-leakage")
+
+    # 10. Drop rows where target is NaN
+    valid = y.notna()
+    logger.info(f"  Dropping {(~valid).sum()} rows with NaN target")
+    df, y = df[valid], y[valid]
+
+    # 11. Extract sensitive attribute
+    sensitive_col = "f_ESCS"
+    sensitive = df[sensitive_col].copy() if sensitive_col in df.columns else pd.Series(np.nan, index=df.index, name=sensitive_col)
+
+    logger.info(f"Done. X={df.shape}  target={target_col}  ESCS NaN={sensitive.isna().sum()}")
+    return df, y, sensitive
 
 
 @dataclass #NOTE
@@ -355,129 +461,4 @@ def load_split(path) -> DataSplit:
 
 
 
-
-
-
-
-
-
-class Preprocessor:
-    def __init__(self, config: dict | None = None) -> None:
-        self.cfg = config or load_config()
-        self._ds_cfg = self.cfg["dataset"]
-        self.target_col = self._ds_cfg.get("target_column")
-        self.protected_attrs = self._ds_cfg.get("protected_attrs", [])
-        self.test_size = self._ds_cfg.get("test_size", 0.20)
-        self.random_seed = self._ds_cfg.get("random_seed", 42)
-        self._encoders: dict[str, LabelEncoder] = {}
-        self._scaler: StandardScaler = None
-        self._feature_names = []
-
-    def fit_transform(self, df) -> DataSplit:
-        df = df.copy()
-        df = self._drop_duplicates(df)
-        df = self._infer_and_validate_columns(df)
-        df = self._encode_categoricals(df, fit=True)
-
-        X, y, protected = self._split_xy(df)
-
-        X_train, X_test, y_train, y_test, prot_train, prot_test = train_test_split(X, y, protected, test_size=self.test_size,
-            random_state=self.random_seed,
-            stratify=y,
-        )
-
-        X_train, X_test = self._scale(X_train, X_test, fit=True)
-        split = DataSplit(
-            X_train=X_train,
-            X_test=X_test,
-            y_train=y_train,
-            y_test=y_test,
-            protected_train=prot_train.reset_index(drop=True),
-            protected_test=prot_test.reset_index(drop=True),
-            feature_names=self._feature_names,
-            target_name=self.target_col,
-            protected_attrs=self.protected_attrs,
-            encoders=self._encoders,
-            scaler=self._scaler,
-        )
-
-
-        logger.info( # WE gotta log it up (in we gotta pump it up rhythm)
-            f"Split: {len(X_train):,} train / {len(X_test):,} test rows "
-            f"| {len(self._feature_names)} features."
-        )
-        
-        return split
-    
-
-    def transform(self, df):
-        if not self._encoders and self._scaler is None:
-            raise RuntimeError("Preprocessor has not been fitted yet.")
-        df = df.copy()
-        df = self._encode_categoricals(df, fit=False)
-        X, _, _ = self._split_xy(df)
-        X_scaled, _ = self._scale(X, X, fit=False)
-        return X_scaled
-    
-    def save(self, path):
-        path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "wb") as f:
-            pickle.dump(self, f)
-        
-        logger.info(f"Preprocessor saved to {path}.")
-
-
-    @classmethod
-    def load(cls, path) -> "Preprocessor":
-        with open(path, "rb") as f:
-            obj = pickle.load(f)
-        
-        logger.info(f"Preprocessor loaded from {path}.")
-        
-        return obj
-
-    
-    def _drop_duplicates(self, df):
-        before = len(df)
-        df = df.drop_duplicates()
-        dropped = before - len(df)
-        if dropped:
-            logger.info(f"Dropped {dropped} duplicate rows.")
-        return df
-
-    def _encode_categoricals(self, df, *, fit):
-        cat_cols = df.select_dtypes(include=["object", "category"]).columns.tolist()
-        if self.target_col in cat_cols:
-            cat_cols.remove(self.target_col)
-        for col in cat_cols:
-            if fit:
-                le = LabelEncoder()
-                df[col] = le.fit_transform(df[col].astype(str))
-                self._encoders[col] = le
-            else:
-                le = self._encoders.get(col)
-                if le is None:
-                    raise KeyError(f"no fitted encoder for column '{col}'.")
-                df[col] = le.transform(df[col].astype(str))
-        return df
-
-
-    def _split_xy(self, df) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
-        protected = df[self.protected_attrs] if self.protected_attrs else pd.DataFrame()
-        drop_cols = [self.target_col] + self.protected_attrs
-        X = df.drop(columns=[c for c in drop_cols if c in df.columns])
-        y = df[self.target_col]
-        self._feature_names = X.columns.tolist()
-        return X, y, protected
-
-    def _scale(self, X_train, X_test, *, fit: bool):
-        num_cols = X_train.select_dtypes(include=["number"]).columns.tolist()
-        if fit:
-            self._scaler = StandardScaler()
-            X_train[num_cols] = self._scaler.fit_transform(X_train[num_cols])
-        else:
-            X_train[num_cols] = self._scaler.transform(X_train[num_cols])
-        X_test[num_cols] = self._scaler.transform(X_test[num_cols])
-        return X_train.reset_index(drop=True), X_test.reset_index(drop=True)
 
