@@ -261,6 +261,63 @@ ALL_SCORE_COLS = ["score_MAT","level_MAT","score_LEN","level_LEN","score_ING","l
 
 
 
+def _drop_if_present(df, cols, reason=""):
+    to_drop = [c for c in cols if c in df.columns]
+    if to_drop and reason:
+        logger.info(f"  Dropping {len(to_drop)} {reason} cols")
+    return df.drop(columns=to_drop)
+
+
+def _aggregate_mean(df, agg_map):
+    """For each entry in agg_map, create a new column as row-wise mean (skipna)."""
+    for new_col, src_cols in agg_map.items():
+        present = [c for c in src_cols if c in df.columns]
+        if present:
+            df[new_col] = df[present].mean(axis=1, skipna=True)
+    return df
+
+
+def _aggregate_sum(df, agg_map):
+    """For each entry in agg_map, create a new column as row-wise sum (min_count=1)."""
+    for new_col, src_cols in agg_map.items():
+        present = [c for c in src_cols if c in df.columns]
+        if present:
+            df[new_col] = df[present].sum(axis=1, min_count=1)
+    return df
+
+
+def _normalize_col(series, old_min, old_max, new_min=0, new_max=1):
+    return ((series - old_min) / (old_max - old_min)) * (new_max - new_min) + new_min
+
+
+def _normalize_extent_frequency_cols(df):
+    """Normalize all extent_of_* and frequency_of_* cols to [0, 1]."""
+    target_prefixes = ("extent_of_", "frequency_of_", "f_extent_", "f_frequency_",
+                       "t_extent_", "t_frequency_")
+    for col in df.columns:
+        if any(col.startswith(p) for p in target_prefixes):
+            col_min, col_max = df[col].min(), df[col].max()
+            if col_max > col_min:  # avoid division by zero
+                df[col] = _normalize_col(df[col], col_min, col_max)
+    return df
+
+
+def nan_summary(df):
+    counts = df.isna().sum()
+    fracs  = counts / len(df)
+    return (
+        pd.DataFrame({"nan_count": counts, "nan_fraction": fracs})
+        .sort_values("nan_fraction", ascending=False)
+        .query("nan_count > 0")
+    )
+
+
+def bin_escs(series):
+    return pd.cut(series, bins=ESCS_BINS, labels=ESCS_LABELS)
+
+
+
+
 @dataclass #NOTE
 class DataSplit:
     X_train: pd.DataFrame
