@@ -1,4 +1,6 @@
 students-dataset/
+artifacts/
+results/
 
 # Python
 __pycache__/
@@ -12,5 +14,3 @@ __pycache__/
 
 *.log
 logs/
-
-artifacts/
