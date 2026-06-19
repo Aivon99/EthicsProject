@@ -16,13 +16,11 @@ def compute_fairness_for_attribute(
     y_true: pd.Series | np.ndarray,
     y_pred: np.ndarray,
     attribute: pd.Series,
-    cfg: dict[str, Any],
 ) -> dict[str, float]:
     """Compute DPD, EOD, and DI for a single protected attribute.
 
     Multi-category attributes are binarised via :func:`_binarise_attribute`
-    before metric computation. The set of metrics computed is controlled by
-    ``cfg["fairness_metrics"]``.
+    before metric computation.
 
     Parameters
     ----------
@@ -32,12 +30,10 @@ def compute_fairness_for_attribute(
         Hard predictions (0/1) from the trained model.
     attribute:
         Raw values of the protected attribute from the test set.
-    cfg:
-        Parsed configuration dict.
 
     Returns
     -------
-    dict with keys ``"dpd"``, ``"eod"``, ``"di"`` (depending on config) plus
+    dict with keys ``"dpd"``, ``"eod"``, ``"di"`` plus
     auxiliary diagnostics ``"rate_priv"``, ``"rate_unpriv"``, ``"tpr_priv"``,
     ``"tpr_unpriv"``, ``"fpr_priv"``, ``"fpr_unpriv"``.
     """
