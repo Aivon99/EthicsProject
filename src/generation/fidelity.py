@@ -159,7 +159,7 @@ def _kl_divergences(
     eps: float = 1e-8,
 ) -> dict[str, float]:
     """
-    Compute Marginal KL divergence as KL(P_real ‖ P_synthetic) for each 
+    Compute Marginal KL divergence as KL(P_real || P_synthetic) for each 
     categorical column. It measures how much the category distribution
     in the synthetic data diverges from the real data.
     
