@@ -114,6 +114,68 @@ def describe_dataset(df: pd.DataFrame, cfg: dict[str, Any]) -> None:
     print(f"{'=' * 60}")
 
 
+def load_real_data(cfg: dict[str, Any]) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Load the preprocessed real train and test splits.
+
+    Parameters
+    ----------
+    cfg:
+        Parsed configuration dict (from :func:`~src.utils.config.load_config`).
+
+    Returns
+    -------
+    (train_df, test_df)
+    """
+    train_path = Path(cfg["paths"]["train_data"])
+    test_path  = Path(cfg["paths"]["test_data"])
+
+    logger.info("Loading real train data from %s", train_path)
+    logger.info("Loading real test data  from %s", test_path)
+
+    return pd.read_csv(train_path), pd.read_csv(test_path)
+
+
+def load_synthetic_dataset(cfg: dict[str, Any], method: str) -> pd.DataFrame:
+    """Load the synthetic training dataset for a given generation method.
+
+    The path is resolved from the config as:
+    ``{paths.synthetic_dir}/{output_subdirs[method]}/{output_filename_template}``
+
+    Parameters
+    ----------
+    cfg:
+        Parsed configuration dict.
+    method:
+        Generation method name: one of the keys in
+        ``cfg["generation"]["output_subdirs"]``.
+
+    Returns
+    -------
+    pd.DataFrame
+    """
+    synthetic_dir     = Path(cfg["paths"]["synthetic_dir"])
+    output_subdirs    = cfg["generation"]["output_subdirs"]
+    filename_template = cfg["generation"]["output_filename_template"]
+
+    subdir   = output_subdirs[method]
+    filename = filename_template.format(method=subdir)
+    path     = synthetic_dir / subdir / filename
+
+    logger.info("Loading synthetic data [%s] from %s", method, path)
+    return pd.read_csv(path)
+
+
+def load_all_synthetic_datasets(cfg: dict[str, Any]) -> dict[str, pd.DataFrame]:
+    """Load every synthetic dataset listed in the config.
+
+    Returns
+    -------
+    dict mapping method name -> DataFrame
+    """
+    methods = list(cfg["generation"]["output_subdirs"].keys())
+    return {m: load_synthetic_dataset(cfg, m) for m in methods}
+
+
 
 # ---- Internal helpers --------------------------------------------------------
 def _validate_schema(df: pd.DataFrame, cfg: dict[str, Any]) -> None:
