@@ -11,12 +11,7 @@ from sklearn.preprocessing import LabelEncoder, StandardScaler
 
 from src.utils import get_logger, load_config
 
-logger = get_logger(__name__)
-
-
 import numpy as np
-import pandas as pd
-from src.utils import get_logger
 
 logger = get_logger(__name__)
 
