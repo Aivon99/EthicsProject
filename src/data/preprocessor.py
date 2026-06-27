@@ -11,7 +11,12 @@ from sklearn.preprocessing import LabelEncoder, StandardScaler
 
 from src.utils import get_logger, load_config
 
+logger = get_logger(__name__)
+
+
 import numpy as np
+import pandas as pd
+from src.utils import get_logger
 
 logger = get_logger(__name__)
 
@@ -419,6 +424,54 @@ def preprocess(
     return df, y, sensitive
 
 
+def build_percentile_target(
+    score_train: pd.Series,
+    score_test: pd.Series,
+    percentile: float = 75,
+    column_name: str = "target_high_perf",
+) -> tuple[pd.Series, pd.Series, float]:
+    """
+    Construct the binary "excellence" target by thresholding a continuous
+    performance score (e.g. score_MAT) at a given percentile, following
+    Marrero et al. (ECAI 2024).
+
+    The threshold is computed on ``score_train`` only and then applied to
+    both splits, to prevent test-set leakage. Call this AFTER the
+    train/test split (not before), since the split itself must be made on
+    the raw continuous score before any threshold exists.
+
+    Parameters
+    ----------
+    score_train, score_test : pd.Series
+        Continuous score column for the train / test rows respectively
+        (output of ``preprocess(..., target_col="score_MAT")``).
+    percentile : float
+        Percentile threshold; rows with score >= threshold are labelled
+        positive (e.g. 75 -> top quartile = "high performance").
+    column_name : str
+        Name assigned to the resulting binary series.
+
+    Returns
+    -------
+    y_train, y_test : pd.Series
+        Binary (0/1) target series, same index as the inputs.
+    threshold : float
+        The percentile value computed on score_train (log / persist this
+        for reproducibility — e.g. alongside config.yaml's ``target`` block).
+    """
+    threshold = float(np.percentile(score_train.dropna(), percentile))
+    y_train = (score_train >= threshold).astype(int).rename(column_name)
+    y_test  = (score_test  >= threshold).astype(int).rename(column_name)
+
+    logger.info(
+        f"Binary target '{column_name}': threshold={threshold:.3f} "
+        f"(p{percentile} of train split only), "
+        f"train positive rate={y_train.mean():.1%}, "
+        f"test positive rate={y_test.mean():.1%}"
+    )
+    return y_train, y_test, threshold
+
+
 @dataclass #NOTE
 class DataSplit:
     X_train: pd.DataFrame
@@ -446,14 +499,3 @@ def load_split(path) -> DataSplit:
         split = pickle.load(f)
     logger.info(f"DataSplit loaded from {path}.")
     return split
-
-
-
-
-
-
-
-
-
-
-
