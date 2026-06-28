@@ -119,7 +119,7 @@ def generate_smote(
 
 
 # ---- Internal helpers --------------------------------------------------------
-ef _densify_one_class(
+def _densify_one_class(
     X_filled: pd.DataFrame,
     y: pd.Series,
     cls: Any,
