@@ -5,7 +5,7 @@ import pandas as pd
 
 from src.evaluation.utility import compute_clf_metrics, maximum_mean_discrepancy, column_correlation_delta, utility_delta
 from src.evaluation.fairness import compute_fairness_metrics, fairness_delta
-from src.models import get_classifier
+from src.models.classifiers import build_classifier
 from src.data.preprocessor import DataSplit
 from src.utils import get_logger
 
@@ -13,8 +13,9 @@ logger = get_logger(__name__)
 
 
 class Evaluator:
-    def __init__(self, split: DataSplit, protected_attrs = None):
+    def __init__(self, split: DataSplit, cfg: dict, protected_attrs = None):
         self.split = split
+        self.cfg = cfg
         self.protected_attrs = protected_attrs or split.protected_attrs
         self._real_metrics: dict | None = None
         self._real_fairness: dict | None = None
@@ -66,7 +67,7 @@ class Evaluator:
         }
 
     def _run(self, X_train, y_train, classifier_name, label) -> dict:
-        clf = get_classifier(classifier_name)
+        clf = build_classifier(classifier_name, self.cfg, y_train=y_train)
         clf.fit(X_train, y_train)
         y_pred = clf.predict(self.split.X_test)
         y_prob = clf.predict_proba(self.split.X_test)[:, 1]
@@ -79,7 +80,3 @@ class Evaluator:
                 ))
         logger.info(f"  [{label}] AUC={metrics['roc_auc']:.4f} | BA={metrics['balanced_accuracy']:.4f}")
         return metrics
-    
-
-
-    
