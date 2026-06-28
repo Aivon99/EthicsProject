@@ -4,26 +4,6 @@ from src.utils import get_logger
 
 logger = get_logger(__name__)
 
-# Sensitive columns — never imputed, only flagged
-SENSITIVE_COLS = [
-    "f_ESCS",
-    "f_monthly_household_income",
-    "f_mother_education_level",
-    "f_father_education_level",
-    "f_mother_occupation",
-    "f_father_occupation",
-    "f_mother_employment_status",
-    "f_father_employment_status",
-    "f_mother_place_of_birth",
-    "f_father_place_of_birth",
-    "f_student_place_of_birth",
-    "f_language_spoken_at_home",
-    "f_type_of_family_unit",
-    "s_gender",
-    "s_birth_country",
-    "s_nazionality_country",
-]
-
 
 def _is_categorical(series: pd.Series) -> bool:
     return series.dtype == object or str(series.dtype) == "category"
@@ -52,7 +32,7 @@ def _is_ordinal_integer(series: pd.Series) -> bool:
 
 def impute(
     X: pd.DataFrame,
-    sensitive_cols: list[str] = SENSITIVE_COLS,
+    sensitive_cols: list[str],
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Impute missing values in X.
@@ -143,6 +123,7 @@ def imputation_report(
     X_before: pd.DataFrame,
     X_after: pd.DataFrame,
     flag_df: pd.DataFrame,
+    sensitive_cols: list[str],
 ) -> pd.DataFrame:
     """
     Returns a tidy summary dataframe comparing NaN counts before and after imputation.
@@ -156,7 +137,7 @@ def imputation_report(
     report["strategy"] = "none"
 
     for col in report.index:
-        if col in SENSITIVE_COLS:
+        if col in sensitive_cols:
             report.loc[col, "strategy"] = "flagged"
         elif before[col] == 0:
             report.loc[col, "strategy"] = "no_nan"
