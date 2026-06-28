@@ -87,20 +87,16 @@ generation:
   # Methods to run
   methods:
     ctgan:
-      enabled:     true
       epochs:      300
       batch_size:  500
 
     tvae:
-      enabled:     true
       epochs:      300
       batch_size:  500
 
     gaussian_copula:
-      enabled:     true
 
     smote:
-      enabled:     true
       k_neighbors: 5
 
   # Sub-directory names under paths.synthetic_dir
