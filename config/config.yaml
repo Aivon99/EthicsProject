@@ -82,7 +82,7 @@ dataset:
 # ---- Synthetic generation 
 generation:
   # How many synthetic rows to produce per method
-  n_synthetic_samples: null  # default: null => match the size of the training set
+  n_synthetic_samples: null  #  match the size of the training set
 
   # Methods to run
   methods:
@@ -95,6 +95,7 @@ generation:
       batch_size:  500
 
     gaussian_copula:
+      none: 0
 
     smote:
       k_neighbors: 5
