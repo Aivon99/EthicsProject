@@ -8,7 +8,7 @@ from typing import Any
 
 
 # ---- Public functions --------------------------------------------------------
-def load_config(config_path = "../config/config.yaml") -> dict[str, Any]:
+def load_config(config_path: str | Path = "../config/config.yaml") -> dict[str, Any]:
     """
     Load the YAML configuration file and relative paths.
 
