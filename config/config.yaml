@@ -20,10 +20,7 @@ paths:
   processed_dir: results/processed  
   figures_dir:   results/figures
   synthetic_dir: results/synthetic
-
-
-
-
+  experiments_dir: results/experiments
 
 #  Reproducibility 
 seed: 42  # my fav
@@ -36,7 +33,10 @@ target:
 
 # ---- Dataset schema 
 dataset:
+  # Target column (must match target.column_name above)
+  target_column: target_high_perf
 
+  # Performance score columns
   performance_columns:
     - score_MAT
     - level_MAT
@@ -45,67 +45,23 @@ dataset:
     - score_ING
     - level_ING
 
+  # Protected attribute columns (circumstances C1-C12 from Marrero et. al.)
   protected_attributes:
-    - name: s_gender                                            # C1  — 0.55%
-      source_col: s_gender
-      binarise: false
+    - s_gender                                           # C1
+    - s_birth_country                                    # C6 - proxy for immigrant status
+    - f_mother_education_level                           # C2
+    - f_father_education_level                           # C3
+    - f_mother_occupation                                # C4
+    - f_father_occupation                                # C5
+    - f_extent_of_books_at_home                          # C8
+    - f_frequency_of_see_adult_read                      # C9
+    - p_public_or_private                                # C10
+    - p_island                                           # C11
+    - p_percentage_of_teachers_changed_school_last_year  # C12
+    - f_ESCS                                             # C13 - socioeconomic composite
 
-    - name: f_mother_edu_binary                                 # C2  — 16.1%
-      source_col: f_mother_education_level
-      binarise: median
-      labels: [low_edu, high_edu]
 
-    - name: f_father_edu_binary                                 # C3  — 27.5%
-      source_col: f_father_education_level
-      binarise: median
-      labels: [low_edu, high_edu]
-
-    - name: f_mother_occ_binary                                 # C4
-      source_col: f_mother_occupation
-      binarise: median
-      labels: [low_occ, high_occ]
-
-    - name: f_father_occ_binary                                 # C5
-      source_col: f_father_occupation
-      binarise: median
-      labels: [low_occ, high_occ]
-
-    - name: f_immigrant_binary                                  # C6  — 0.03%
-      source_col: s_birth_country
-      binarise: equality
-      match_value: Spain
-      labels: [immigrant, native]
-
-    - name: f_books_binary                                      # C8  — 27.4%
-      source_col: f_extent_of_books_at_home
-      binarise: median
-      labels: [few, many]
-
-    - name: f_adults_read_binary                                # C9
-      source_col: f_frequency_of_see_adult_read
-      binarise: equality
-      match_value: daily
-      labels: [not_daily, daily]
-
-    - name: p_school_type_binary                                # C10
-      source_col: p_public_or_private
-      binarise: false
-
-    - name: p_island_binary                                     # C11
-      source_col: p_island
-      binarise: false
-
-    - name: p_teachers_change_binary                            # C12
-      source_col: p_percentage_of_teachers_changed_school_last_year
-      binarise: median
-      labels: [low_change, high_change]
-
-    - name: f_ESCS_binary                                       # C13 — 13.2%
-      source_col: f_ESCS
-      binarise: threshold
-      threshold: 0
-      labels: [disadvantaged, advantaged]
-
+  # Columns that are purely administrative identifiers
   id_columns:
     - id_questionnaire
     - id_student_original
@@ -115,6 +71,7 @@ dataset:
     - id_student_16_19
     - id_school_16_19
 
+  # Columns that are categorical
   categorical_columns:
     - s_gender
     - s_birth_country
@@ -156,38 +113,42 @@ generation:
   # File name template
   output_filename_template: "synthetic_{method}.csv"
 
-
-
-# ---- xperiments
-
+# ---- TSTR Experiment Configuration -------------------------------------------
 experiments:
-  baseline_label: "real"
+  # The real-data baseline is always 
+  # included as the first row ("real") in results.
+  baseline_label: real
 
+  # ---- Classifiers -------------------------------------------------------------
   classifiers:
     logistic_regression:
-      max_iter:      1000
-      C:             1.0
-      solver:        lbfgs
-      class_weight:  balanced
+      max_iter: 1000
+      C: 1.0
+      solver: lbfgs
+      class_weight: balanced
 
     xgboost:
-      n_estimators:      200
-      max_depth:         6
-      learning_rate:     0.1
-      subsample:         0.8
-      colsample_bytree:  0.8
-      scale_pos_weight:  auto
-      eval_metric:       logloss
+      n_estimators: 200
+      max_depth: 4
+      learning_rate: 0.05
+      subsample: 0.8
+      colsample_bytree: 0.8
+      use_label_encoder: false
+      eval_metric: logloss
+      scale_pos_weight: auto
 
     mlp:
-      hidden_layer_sizes:   [128, 64]
-      activation:           relu
-      max_iter:             300
-      early_stopping:       true
-      validation_fraction:  0.1
-      n_iter_no_change:     10
-      learning_rate_init:   0.001
-      batch_size:           256      
+      hidden_layer_sizes: [128, 64]
+      activation: relu
+      max_iter: 300
+      early_stopping: true
+      validation_fraction: 0.1
+      n_iter_no_change: 15
+      learning_rate_init: 0.001
+      batch_size: 256
 
-
-
+# ---- MMD kernel settings -----------------------------------------------------
+mmd:
+  kernel: rbf        # radial basis function kernel
+  gamma: null        # null -> median heuristic (1 / (2 * median(pairwise distances)^2))
+  n_subsample: 2000  # subsample size for MMD computation
