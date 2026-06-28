@@ -119,7 +119,7 @@ def generate_smote(
 
 
 # ---- Internal helpers --------------------------------------------------------
-def _densify_one_class(
+ef _densify_one_class(
     X_filled: pd.DataFrame,
     y: pd.Series,
     cls: Any,
@@ -199,7 +199,7 @@ def _densify_one_class(
  
     return synthetic_rows
  
-
+ 
 def _make_anchor_rows(
     X_cls: pd.DataFrame,
     n: int,
