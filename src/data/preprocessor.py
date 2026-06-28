@@ -7,7 +7,7 @@ from typing import Any
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.preprocessing import LabelEncoder, OrdinalEncoder, StandardScaler
 
 from src.utils import get_logger, load_config
 
@@ -63,20 +63,6 @@ ALL_SCORE_COLS = [
     "score_MAT", "level_MAT",
     "score_LEN", "level_LEN",
     "score_ING", "level_ING",
-]
-
-# Sensitive attributes (raw names in original.csv)
-SENSITIVE_COLS = [
-    "ESCS",
-    "f34",           # monthly household income
-    "f3a", "f3b",    # mother/father education level
-    "mother_occupation", "father_occupation",
-    "f4a", "f4b",    # mother/father employment status
-    "f5a", "f5b", "f5n",  # place of birth
-    "f7",            # language spoken at home
-    "f31",           # type of family unit
-    "a1",            # student gender
-    "country_iso_cnac", "country_iso_nac",  # nationality
 ]
 
 # ── Aggregation maps (raw column names) ────────────────────────────────────────
@@ -309,6 +295,38 @@ def nan_summary(df):
 
 def bin_escs(series):
     return pd.cut(series, bins=ESCS_BINS, labels=ESCS_LABELS)
+
+
+def fit_feature_encoders(X_train: pd.DataFrame):
+    """Fit OrdinalEncoder on categorical cols, StandardScaler on numerical."""
+    cat_cols = X_train.select_dtypes(include="object").columns.tolist()
+    num_cols = X_train.select_dtypes(include="number").columns.tolist()
+
+    enc = OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=-1)
+    scaler = StandardScaler()
+
+    if cat_cols:
+        enc.fit(X_train[cat_cols])
+    if num_cols:
+        scaler.fit(X_train[num_cols])
+
+    return enc, scaler, cat_cols, num_cols
+
+
+def apply_feature_encoders(X: pd.DataFrame, enc, scaler, cat_cols, num_cols) -> pd.DataFrame:
+    """Apply fitted OrdinalEncoder and StandardScaler. Returns a DataFrame."""
+    X_out = X.copy()
+    present_cat = [c for c in cat_cols if c in X_out.columns]
+    present_num = [c for c in num_cols if c in X_out.columns]
+
+    if present_cat:
+        X_out[present_cat] = enc.transform(X_out[present_cat])
+    if present_num:
+        X_out[present_num] = scaler.transform(X_out[present_num])
+
+    # Fill any remaining NaNs (sensitive cols not imputed in Goal 1) with 0
+    X_out = X_out.fillna(0.0)
+    return X_out.astype(float)
 
 
 # ── Main pipeline ──────────────────────────────────────────────────────────────
