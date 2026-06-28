@@ -111,3 +111,36 @@ generation:
 
   # File name template
   output_filename_template: "synthetic_{method}.csv"
+
+
+
+
+# ---- xperiments
+experiments:
+  baseline_label: "real"
+
+  classifiers:
+    logistic_regression:
+      max_iter:      1000
+      C:             1.0
+      solver:        lbfgs
+      class_weight:  balanced
+
+    xgboost:
+      n_estimators:      200
+      max_depth:         6
+      learning_rate:     0.1
+      subsample:         0.8
+      colsample_bytree:  0.8
+      scale_pos_weight:  auto
+      eval_metric:       logloss
+
+    mlp:
+      hidden_layer_sizes:   [128, 64]
+      activation:           relu
+      max_iter:             300
+      early_stopping:       true
+      validation_fraction:  0.1
+      n_iter_no_change:     10
+      learning_rate_init:   0.001
+      batch_size:           256      
