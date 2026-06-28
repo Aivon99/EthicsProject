@@ -199,7 +199,7 @@ def _densify_one_class(
  
     return synthetic_rows
  
-
+ 
 def _make_anchor_rows(
     X_cls: pd.DataFrame,
     n: int,
