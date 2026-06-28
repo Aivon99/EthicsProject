@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
-
+import sys
 import pandas as pd
 
 from src.utils.logging import get_logger
@@ -10,7 +10,19 @@ from src.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-# ---- Public functions --------------------------------------------------------
+# ---- Public functions 
+
+def load_data(file_path):
+    """Load data from a CSV file."""
+    try:
+        data = pd.read_csv(file_path)
+        return data
+    except Exception as e:
+        print(f"Error loading data: {e}")
+        sys.exit(1)
+
+
+
 def load_dataset(
     path: str | Path,
     cfg: dict[str, Any],

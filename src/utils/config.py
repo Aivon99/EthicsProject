@@ -8,9 +8,9 @@ from typing import Any
 
 
 # ---- Public functions --------------------------------------------------------
-def load_config(config_path: str | os.PathLike) -> dict[str, Any]:
+def load_config(config_path = "../config/config.yaml") -> dict[str, Any]:
     """
-    Load the YAML configuration file and resolve relative paths.
+    Load the YAML configuration file and relative paths.
 
     Parameters
     ----------

@@ -1,30 +1,37 @@
-# ---- Paths -------------------------------------------------------------------
+# Paths
 paths:
+
+  
   # Reference dataset directory
   # (from Aequitas collection on Zenodo: https://zenodo.org/records/17592007)
   student_dataset_dir: student-dataset
   raw_data: Data/original.csv  # working copy of the original Aequitas dataset
 
-  # Goal 1 output: the preprocessed dataset used as input for Goal 2.
-  train_data: students-dataset/mock_final.csv   # <- TODO: swap to results/processed/train.csv after Goal 1
-  test_data:  students-dataset/mock_final.csv   # <- TODO: swap to results/processed/test.csv  after Goal 1
+  link: "stud" # in case we cant push repo with csv, upload on cloud and add code to fetch, add here link
 
-  results_dir:     results
-  processed_dir:   results/processed  # <- TODO: to move here (Data/processed.csv, Data/original.csv)
-  figures_dir:     results/figures
-  synthetic_dir:   results/synthetic
+
+
+  # Goal 1 output: the preprocessed dataset used as input for Goal 2.
+  processed_data: Data/processed.csv
+  train_data:     Data/train.csv
+  test_data:      Data/test.csv
+
+  results_dir:   results
+  processed_dir: results/processed  
+  figures_dir:   results/figures
+  synthetic_dir: results/synthetic
   experiments_dir: results/experiments
 
-# ---- Reproducibility ---------------------------------------------------------
+#  Reproducibility 
 seed: 42  # my fav
 
-# ---- Target variable ---------------------------------------------------------
+#  Target variable 
 target:
   score_column:  score_MAT         # continuous score used to build the target
   percentile:    75                # positive class: score >= this percentile
   column_name:   target_high_perf  # name of the binary column
 
-# ---- Dataset schema ----------------------------------------------------------
+# ---- Dataset schema 
 dataset:
   # Target column (must match target.column_name above)
   target_column: target_high_perf
@@ -72,7 +79,7 @@ dataset:
     - p_public_or_private
     - p_island
 
-# ---- Synthetic generation ----------------------------------------------------
+# ---- Synthetic generation 
 generation:
   # How many synthetic rows to produce per method
   n_synthetic_samples: null  # default: null => match the size of the training set
