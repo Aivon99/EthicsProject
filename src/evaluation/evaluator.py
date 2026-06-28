@@ -3,8 +3,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from src.evaluation.utility import compute_clf_metrics, maximum_mean_discrepancy, column_correlation_delta, utility_delta
-from src.evaluation.fairness import compute_fairness_metrics, fairness_delta
+from src.evaluation.utility import compute_utility_metrics, compute_mmd, column_correlation_delta, utility_delta
+from src.evaluation.fairness import compute_all_fairness_metrics, summarise_fairness
 from src.models.classifiers import build_classifier
 from src.data.preprocessor import DataSplit
 from src.utils import get_logger
@@ -13,19 +13,24 @@ logger = get_logger(__name__)
 
 
 class Evaluator:
-    def __init__(self, split: DataSplit, cfg: dict, protected_attrs = None):
+    """Trains a classifier on a given train set and scores it against the
+    fixed real test set held by ``split`` (TSTR: train-on-synthetic/real,
+    test-on-real).
+    """
+
+    def __init__(self, split: DataSplit, cfg: dict, protected_attrs=None):
         self.split = split
         self.cfg = cfg
         self.protected_attrs = protected_attrs or split.protected_attrs
         self._real_metrics: dict | None = None
-        self._real_fairness: dict | None = None
+        # Per-attribute fairness DataFrame from the most recent _run() call,
+        # for callers that want the full breakdown (not just the flattened dict).
+        self.last_fairness_detail: pd.DataFrame | None = None
 
     def baseline(self, classifier_name) -> dict:
         logger.info(f"Computing real-data baseline for [{classifier_name}] …")
         real_result = self._run(self.split.X_train, self.split.y_train, classifier_name, "real")
         self._real_metrics = {k: real_result[k] for k in ("balanced_accuracy", "f1_macro", "roc_auc")}
-        self._real_fairness = {k: v for k, v in real_result.items()
-                               if any(a in k for a in self.protected_attrs)}
         return real_result
 
     def evaluate(
@@ -34,8 +39,8 @@ class Evaluator:
         y_synth: pd.Series,
         classifier_name,
         generator_name,
-        repetition = 0,
-        X_real_for_mmd = None,
+        repetition=0,
+        X_real_for_mmd=None,
     ) -> dict:
         if self._real_metrics is None:
             self.baseline(classifier_name)
@@ -47,12 +52,8 @@ class Evaluator:
         gap = utility_delta(self._real_metrics, synth_clf)
 
         X_real = X_real_for_mmd if X_real_for_mmd is not None else self.split.X_train
-        mmd_val = maximum_mean_discrepancy(X_real, X_synth)
+        mmd_val = compute_mmd(X_real, X_synth, self.cfg)
         corr = column_correlation_delta(X_real, X_synth)
-
-        synth_fairness = {k: synth_result[k] for k in synth_result
-                          if any(a in k for a in self.protected_attrs)}
-        f_gap = fairness_delta(self._real_fairness, synth_fairness)
 
         return {
             "generator": generator_name,
@@ -63,7 +64,6 @@ class Evaluator:
             "mmd": mmd_val,
             "corr_mean_abs_delta": corr["mean_abs_delta"],
             "corr_max_abs_delta": corr["max_abs_delta"],
-            **{f"fairness_gap_{k}": v for k, v in f_gap.items()},
         }
 
     def _run(self, X_train, y_train, classifier_name, label) -> dict:
@@ -71,12 +71,19 @@ class Evaluator:
         clf.fit(X_train, y_train)
         y_pred = clf.predict(self.split.X_test)
         y_prob = clf.predict_proba(self.split.X_test)[:, 1]
-        metrics = compute_clf_metrics(self.split.y_test.values, y_pred, y_prob)
-        for attr in self.protected_attrs:
-            if attr in self.split.protected_test.columns:
-                metrics.update(compute_fairness_metrics(
-                    self.split.y_test.values, y_pred,
-                    self.split.protected_test[attr], attr_name=attr,
-                ))
+
+        metrics = compute_utility_metrics(self.split.y_test.values, y_pred, y_prob)
+
+        fairness_cfg = {**self.cfg, "fairness_attributes_subset": self.protected_attrs}
+        fairness_df = compute_all_fairness_metrics(
+            self.split.y_test.values, y_pred, self.split.protected_test, fairness_cfg,
+        )
+        self.last_fairness_detail = fairness_df
+
+        for _, frow in fairness_df.iterrows():
+            for m in ("dpd", "eod", "di"):
+                metrics[f"{frow['attribute']}_{m}"] = frow[m]
+        metrics.update(summarise_fairness(fairness_df))
+
         logger.info(f"  [{label}] AUC={metrics['roc_auc']:.4f} | BA={metrics['balanced_accuracy']:.4f}")
         return metrics

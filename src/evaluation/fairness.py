@@ -125,7 +125,7 @@ def compute_all_fairness_metrics(
         if attr not in test_df.columns:
             logger.warning("Protected attribute '%s' not found in test_df. Skipping.", attr)
             continue
-        metrics              = compute_fairness_for_attribute(y_true, y_pred, test_df[attr], cfg)
+        metrics              = compute_fairness_for_attribute(y_true, y_pred, test_df[attr])
         metrics["attribute"] = attr
         rows.append(metrics)
 
