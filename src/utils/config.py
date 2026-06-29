@@ -78,8 +78,14 @@ def _resolve_paths(paths_section: dict, project_root: Path) -> dict:
     resolved: dict[str, Any] = {}
     for key, value in paths_section.items():
         if isinstance(value, str):
-            p = Path(value)
-            resolved[key] = p if p.is_absolute() else (project_root / p).resolve()
+            if value == "":
+                # Empty string means "unset" (e.g. raw_data_url left blank to
+                # disable the download fallback) -- resolving it would turn it
+                # into project_root, which is truthy and breaks that contract.
+                resolved[key] = value
+            else:
+                p = Path(value)
+                resolved[key] = p if p.is_absolute() else (project_root / p).resolve()
         elif isinstance(value, dict):
             resolved[key] = _resolve_paths(value, project_root)
         else:

@@ -7,7 +7,11 @@ paths:
   student_dataset_dir: student-dataset
   raw_data: Data/original.csv  # working copy of the original Aequitas dataset
 
-  link: "stud" # in case we cant push repo with csv, upload on cloud and add code to fetch, add here link
+  # If raw_data is missing locally, load_data() falls back to downloading it
+  # from here (any Google Drive share link works -- gdown resolves the
+  # direct-download URL and large-file confirm token automatically).
+  # Leave empty to disable the fallback (fails with a clear error instead).
+  raw_data_url: ""
 
 
 
@@ -79,7 +83,20 @@ dataset:
     - p_public_or_private
     - p_island
 
-# ---- Synthetic generation 
+# ---- Feature selection (Goal 1) -----------------------------------------------
+# preprocess() keeps a large number of raw, never-aggregated questionnaire
+# columns (mostly principal/teacher survey items) that have no rename or
+# aggregation rule. select_features() (src/data/feature_selection.py) scores
+# every *non-sensitive* candidate column's relevance to the target and keeps
+# only the top `k`; every protected attribute is always kept regardless of
+# its score. Set enabled: false to disable entirely and keep all columns.
+feature_selection:
+  enabled: true
+  method: mutual_info  # mutual_info | f_classif | variance
+  k: 60                # number of non-sensitive columns to keep
+  random_state: null   # null -> falls back to the top-level seed
+
+# ---- Synthetic generation
 generation:
   # How many synthetic rows to produce per method
   n_synthetic_samples: null  #  match the size of the training set

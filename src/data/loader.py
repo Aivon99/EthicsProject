@@ -10,16 +10,55 @@ from src.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-# ---- Public functions 
+# ---- Public functions
 
-def load_data(file_path):
-    """Load data from a CSV file."""
+def load_data(file_path, download_url = None):
+    """Load data from a CSV file, downloading it first if missing.
+
+    Parameters
+    ----------
+    file_path:
+        Local CSV path (e.g. ``cfg["paths"]["raw_data"]``). Unchanged default
+        behaviour when the file already exists there.
+    download_url:
+        Optional Google Drive share link (e.g. ``cfg["paths"]["raw_data_url"]``).
+        If ``file_path`` doesn't exist and a URL is given, the file is
+        downloaded to ``file_path`` first. Pass ``None`` (or leave the config
+        value empty) to disable the fallback.
+    """
+    path = Path(file_path)
+    if not path.exists():
+        if not download_url:
+            print(f"Error loading data: {path} not found and no download_url was provided.")
+            sys.exit(1)
+        try:
+            _download_from_gdrive(download_url, path)
+        except Exception as e:
+            print(f"Error downloading data from {download_url}: {e}")
+            sys.exit(1)
+
     try:
-        data = pd.read_csv(file_path)
+        data = pd.read_csv(path)
         return data
     except Exception as e:
         print(f"Error loading data: {e}")
         sys.exit(1)
+
+
+def _download_from_gdrive(url: str, dest: Path) -> None:
+    """Download ``url`` (a Google Drive share link) to ``dest`` via gdown.
+
+    gdown resolves the direct-download URL and the large-file confirmation
+    token automatically, which a plain ``requests.get`` does not.
+    """
+    import gdown
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    logger.info("%s not found locally -- downloading from %s", dest, url)
+    output = gdown.download(url=url, output=str(dest), quiet=False, fuzzy=True)
+    if output is None or not dest.exists():
+        raise RuntimeError(f"Download from {url} did not produce {dest}.")
+    logger.info("Downloaded dataset to %s", dest)
 
 
 
