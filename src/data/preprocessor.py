@@ -15,7 +15,7 @@ import numpy as np
 
 logger = get_logger(__name__)
 
-# ── Column taxonomy (raw original.csv names) ───────────────────────────────────
+# Columns (raw original.csv names)
 
 IDENTIFIER_COLS = [
     "id_student", "id_questionnaire", "id_student_original",
@@ -65,19 +65,19 @@ ALL_SCORE_COLS = [
     "score_ING", "level_ING",
 ]
 
-# ── Aggregation maps (raw column names) ────────────────────────────────────────
-# Each entry: new_col_name -> list of source cols to average (skipna=True)
-
+#  Aggregation maps
+ 
 FAMILY_AGG_MEAN = {
-    "frequency_of_books_at_home":   ["f9b", "f9c", "f9h"],
-    "frequency_of_tech_at_home":    ["f9d", "f9f"],
-    "frequency_of_see_adult_read":  ["f12a", "f12b"],
-    "extent_of_interest_in_interview": ["f15a", "f15b", "f15d", "f15f"],
-    "frequency_of_support_at_home": ["f16a", "f16b", "f16c", "f16d", "f16e", "f16f"],
-    "frequency_of_parent_involved_in_school": ["f17a", "f17b", "f17c", "f17d"],
-    "extent_of_family_satisfaction": ["f18a", "f18b", "f18e", "f18f", "f18g", "f18h"],
-    "extent_of_teacher_satisfaction": ["f19a", "f19b", "f19c", "f19d", "f19e"],
+    "f_frequency_of_books_at_home":   ["f9b", "f9c", "f9h"],
+    "f_frequency_of_tech_at_home":    ["f9d", "f9f"],
+    "f_frequency_of_see_adult_read":  ["f12a", "f12b"],
+    "f_extent_of_interest_in_interview": ["f15a", "f15b", "f15d", "f15f"],
+    "f_frequency_of_support_at_home": ["f16a", "f16b", "f16c", "f16d", "f16e", "f16f"],
+    "f_frequency_of_parent_involved_in_school_activities": ["f17a", "f17b", "f17c", "f17d"],
+    "f_extent_of_family_satisfaction": ["f18a", "f18b", "f18e", "f18f", "f18g", "f18h"],
+    "f_extent_of_teacher_satisfaction": ["f19a", "f19b", "f19c", "f19d", "f19e"],
 }
+
 # Source cols to drop after family aggregation
 FAMILY_AGG_DROP = [
     "f9b","f9c","f9h","f9d","f9f",
@@ -90,50 +90,47 @@ FAMILY_AGG_DROP = [
 ]
 
 TEACHER_AGG_MEAN = {
-    "extent_of_evaluation_variety": [
+    "t_extent_of_evaluation_variety": [
         "p24a","p24b","p24c","p24d","p24e",
         "p24f","p24g","p24h","p24i","p24j","p24k",
     ],
-    "extent_of_pfc_incidence":      ["p16a","p16c","p16g"],
-    "extent_of_family_interest":    ["p29a","p29b","p29c","p29d","p29e"],
-    "extent_of_family_support":     ["p30a","p30b","p30c"],
-    "extent_of_work_facilitated":   ["p34b","p34d"],
-    "extent_of_positive_relationships": ["p31d","p311a","p311b","p311c","p311e"],
-    "extent_of_student_involvement":["p21a","p21b","p21c","p21d","p21e","p21f"],
-    "extent_of_teaching_methods":   ["p22a","p22d","p22e","p22f","p22g"],
-    "extent_of_resource_variety":   ["p23a","p23b","p23c","p23d","p23e","p23f","p23g","p23h"],
-    "extent_of_class_behaviour":    ["p12b","p12d"],
-    "extent_of_opinion_on_school":  ["p32b"],
-    "extent_of_good_work_by_non_teachers": ["p331d","p331e","p331f"],
-    "extent_of_work_hampered":      ["p27b","p27c","p27d","p27e","p27f","p27g","p27h"],
-    "extent_of_satisfaction":       ["p41a","p41b","p41c","p41g","p41h","p41i"],
-    "extent_of_results_satisfaction":["p13","p13c"],
+    "t_extent_of_pfc_incidence":      ["p16a","p16c","p16g"],
+    "t_extent_of_family_interest":    ["p29a","p29b","p29c","p29d","p29e"],
+    "t_extent_of_family_support":     ["p30a","p30b","p30c"],
+    "t_extent_of_work_facilitated_by_management":   ["p34b","p34d"],
+    "t_extent_of_positive_relationships": ["p31d","p311a","p311b","p311c","p311e"],
+    "t_extent_of_student_involvement_during_class":["p21a","p21b","p21c","p21d","p21e","p21f"],
+    "t_extent_of_teaching_methods_variety":   ["p22a","p22d","p22e","p22f","p22g"],
+    "t_extent_of_resource_variety":   ["p23a","p23b","p23c","p23d","p23e","p23f","p23g","p23h"],
+    "t_extent_of_class_behaviour":    ["p12b","p12d"],
+    "t_extent_of_opinion_on_school":  ["p32b"],
+    "t_extent_of_good_work_by_non_teachers": ["p331d","p331e","p331f","p331g"],
+    "t_extent_of_work_hampered":      ["p27b","p27c","p27d","p27e","p27f","p27g","p27h"],
 }
 
 TEACHER_AGG_SUM = {
-    "number_of_individual_training_topics": [
+    "t_number_of_individual_training_topics": [
         "p18a","p18b","p18c","p18d","p18e","p18f","p18g","p18h","p18i",
-    ],
-    "number_of_subjects_taught": ["p9a","p9b","p9c","p9d","p9e","p9f"],
+    ]
 }
 
-# Cols to drop after teacher aggregation (functional deps + high NaN + aggregated)
 TEACHER_DROP = [
-    # pfc topics
-    "p15a","p15b","p15c","p15d","p15e","p15f","p15g","p15h","p15i",
-    # class problem detail
-    "p26a","p26b","p26c","p26d",
-    # high NaN
-    "p27a","p16h","p19","p23i","p32e","p41d","p41e","p41f","p41j","p299d","p331j",
-    # functional dependencies
-    "p12a","p12c","p13b","p16d","p16e","p16b","p16f","p18c","p18b",
-    "p22b","p22c","p32d","p32a","p32c","p34f","p34e","p34c","p34a","p34g",
-    "p311h","p311f","p311g","p331c","p331b","p331a",
-    # scale-inconsistent cols (rescaled before agg, then drop originals)
-    "p331g",
+    "p24a","p24b","p24c","p24d","p24e","p24f","p24g","p24h","p24i","p24j","p24k",
+    "p16a","p16b","p16c","p16d","p16e","p16f","p16g","p16h",
+    "p27a","p27b","p27c","p27d","p27e","p27f","p27g","p27h",
+    "p29a","p29b","p29c","p29d","p29e","p299d",
+    "p30a","p30b","p30c",
+    "p34a","p34b","p34c","p34d","p34e","p34f","p34g",
+    "p31d","p311a","p311b","p311c","p311e","p311f","p311g","p311h",
+    "p21a","p21b","p21c","p21d","p21e","p21f",
+    "p22a","p22b","p22c","p22d","p22e","p22f","p22g",
+    "p23a","p23b","p23c","p23d","p23e","p23f","p23g","p23h","p23i",
+    "p12a","p12b","p12c","p12d",
+    "p32a","p32b","p32c","p32d","p32e",
+    "p331a","p331b","p331c","p331d","p331e","p331f","p331g","p331j",
 ]
 
-# Cols to rename (raw -> readable)
+# Cols to rename (raw to readable, from dataset code)
 RENAME_MAP = {
     # student
     "a1":   "s_gender",
@@ -192,7 +189,7 @@ RENAME_MAP = {
     "pfc":  "t_main_topic_of_pfc",
 }
 
-# Categorical recoding maps (raw int -> readable string)
+# raw int -> readable string
 RECODE_MAP = {
     "f_respondent": {1: "MOTHER", 2: "FATHER", 3: "OTHER"},
     "f_mother_place_of_birth": {
@@ -238,8 +235,37 @@ ESCS_BINS   = [-np.inf, -2, -1, 0, 1, 2, np.inf]
 ESCS_LABELS = ["VERY_LOW", "LOW", "BELOW_AVG", "ABOVE_AVG", "HIGH", "VERY_HIGH"]
 
 DEFAULT_NAN_THRESHOLD = 0.5
-ALL_SCORE_COLS = ["score_MAT","level_MAT","score_LEN","level_LEN","score_ING","level_ING"]
 
+
+# Helper functions for aggregations
+def _get_good_bad_agg(row, good_cols, bad_cols, max_degree_of_agreement=4):
+    good_present = [c for c in good_cols if c in row.index]
+    bad_present = [c for c in bad_cols if c in row.index]
+    
+    no_good = row[good_present].notna().sum()
+    no_bad = row[bad_present].notna().sum()
+    
+    if no_good == 0 and no_bad == 0:
+        return np.nan
+    
+    sum_good = row[good_present].sum()
+    sum_bad = row[bad_present].sum()
+    
+    return (sum_good + (no_bad * (max_degree_of_agreement + 1)) - sum_bad) / (no_good + no_bad)
+
+
+def _custom_binary_agg(series):
+    binary = []
+    for x in series:
+        if x == 1:
+            binary.append(1)
+        elif x == 2:
+            binary.append(0)
+        else:
+            binary.append(x)
+    if any(pd.isna(v) for v in binary):
+        return np.nan
+    return sum(val * (2**idx) for idx, val in enumerate(reversed(binary)))
 
 
 def _drop_if_present(df, cols, reason=""):
@@ -273,8 +299,12 @@ def _normalize_col(series, old_min, old_max, new_min=0, new_max=1):
 
 def _normalize_extent_frequency_cols(df):
     """Normalize all extent_of_* and frequency_of_* cols to [0, 1]."""
-    target_prefixes = ("extent_of_", "frequency_of_", "f_extent_", "f_frequency_",
-                       "t_extent_", "t_frequency_")
+    target_prefixes = (
+        "extent_of_", "frequency_of_", 
+        "f_extent_", "f_frequency_",
+        "t_extent_", "t_frequency_",
+        "s_extent_", "s_frequency_"
+    )
     for col in df.columns:
         if any(col.startswith(p) for p in target_prefixes):
             col_min, col_max = df[col].min(), df[col].max()
@@ -329,13 +359,13 @@ def apply_feature_encoders(X: pd.DataFrame, enc, scaler, cat_cols, num_cols) -> 
     return X_out.astype(float)
 
 
-# ── Main pipeline ──────────────────────────────────────────────────────────────
+# Main pipeline 
 
 def preprocess(
     df: pd.DataFrame,
-    target_col: str = "level_MAT",
-    nan_threshold: float = DEFAULT_NAN_THRESHOLD,
-    drop_other_scores: bool = True,
+    target_col= "level_MAT",
+    nan_threshold = DEFAULT_NAN_THRESHOLD,
+    drop_other_scores = True,
 ) -> tuple[pd.DataFrame, pd.Series, pd.Series]:
     """
     Preprocess original.csv into (X, y, sensitive).
@@ -344,78 +374,174 @@ def preprocess(
     -----
     1.  Drop identifiers, availability flags, redundant cols
     2.  Drop rows with >90% NaN
+        2b. Student aggregations (Repo B style)
     3.  Family questionnaire aggregations
-    4.  Teacher questionnaire aggregations
-    5.  Drop aggregated source cols + functional deps
-    6.  Rename cols to readable names
-    7.  Recode categorical integers to strings
-    8.  Normalize extent_of_* / frequency_of_* to [0,1]
-    9.  Drop columns above NaN threshold
-    10. Extract target and sensitive attribute
+    4.  Teacher questionnaire aggregations & drops
+    5.  Rename remaining columns to readable names
+    6.  Recode categorical integers to strings & process boolean columns
+    7.  Normalize extent_of_* / frequency_of_* to [0,1]
+    8.  Drop columns above NaN threshold
+    
+    9.  Extract target and sensitive attribute
     """
     logger.info(f"Input shape: {df.shape}")
     df = df.copy()
 
-    # 1. Structural drops
-    logger.info("Step 1: structural drops")
+    #structural drops
+    logger.info("structural drops")
     df = _drop_if_present(df, IDENTIFIER_COLS,   "identifier")
     df = _drop_if_present(df, AVAILABILITY_COLS, "availability-flag")
     df = _drop_if_present(df, REDUNDANT_COLS,    "redundant")
 
-    # 2. Drop rows with >90% missing
-    logger.info("Step 2: row-level NaN filter")
+    # drop rows with >90% missing
+    logger.info(" row-level NaN filter")
     row_nan_frac = df.isna().mean(axis=1)
     n_before = len(df)
     df = df[row_nan_frac <= 0.9]
     logger.info(f"  Dropped {n_before - len(df)} rows with >90% NaN")
 
-    # 3. Family aggregations
-    logger.info("Step 3: family aggregations")
+    #Student aggregations ( like code from the repo/thing of the data)
+    logger.info(" student aggregations")
+    student_mean_map = {
+        "s_frequency_of_computer_usage": ["a8a", "a8b", "a8c"],
+        "s_frequency_of_internet_usage": ["a9a", "a9b", "a9c", "a9d", "a9e", "a9g"],
+        "s_frequency_of_work_with_teachers": ["a10a", "a10b", "a10c", "a10d", "a10e", "a10f", "a10g", "a10h", "a10i", "a10j"],
+        "s_frequency_of_materials_in_class": ["a11a", "a11b", "a11c", "a11d", "a11e", "a11f", "a11h"],
+        "s_frequency_of_evaluations": ["a12a", "a12b", "a12c", "a12d", "a12e", "a12f", "a12g", "a12h", "a12i"],
+        "s_extent_of_teacher_performance": ["a15a", "a15b", "a15c", "a15d", "a15e", "a15f", "a15g", "a15h", "a15i", "a15j"],
+        "s_extent_of_class_env": ["a16a", "a16b", "a16c", "a16d", "a16e", "a16f", "a16g", "a16h"]
+    }
+    for new_col, src_cols in student_mean_map.items():
+        present = [c for c in src_cols if c in df.columns]
+        if present:
+            df[new_col] = df[present].mean(axis=1, skipna=True)
+
+    student_mixed_map = {
+        "s_extent_of_classmates_affinity": {
+            "good": ["a14a", "a14b", "a14g", "a14h"],
+            "bad": ["a14d", "a14e", "a14f"]
+        },
+        "s_extent_of_school_satisfaction": {
+            "good": ["a17a", "a17b", "a17c", "a17e", "a17h"],
+            "bad": ["a17d"]
+        },
+        "s_extent_of_math_affinity": {
+            "good": ["a20a", "a20e"],
+            "bad": ["a20b", "a20c", "a20d"]
+        },
+        "s_extent_of_reading_affinity": {
+            "good": ["a21b"],
+            "bad": ["a21c", "a21d", "a21e"]
+        }
+    }
+    for new_col, groups in student_mixed_map.items():
+        good_present = [c for c in groups["good"] if c in df.columns]
+        bad_present = [c for c in groups["bad"] if c in df.columns]
+        if good_present or bad_present:
+            df[new_col] = df.apply(lambda r: _get_good_bad_agg(r, good_present, bad_present, 4), axis=1)
+
+    student_agg_cols_to_drop = [
+        "a8a", "a8b", "a8c",
+        "a9a", "a9b", "a9c", "a9d", "a9e", "a9f", "a9g",
+        "a10a", "a10b", "a10c", "a10d", "a10e", "a10f", "a10g", "a10h", "a10i", "a10j", "a10k", "a10l", "a10m", "a10n",
+        "a11a", "a11b", "a11c", "a11d", "a11e", "a11f", "a11g", "a11h",
+        "a12a", "a12b", "a12c", "a12d", "a12e", "a12f", "a12g", "a12h", "a12i",
+        "a13a", "a13b", "a13c", "a13d",
+        "a14a", "a14b", "a14c", "a14d", "a14e", "a14f", "a14g", "a14h",
+        "a141g", "a144d", "a144h", "a166f", "a177d",
+        "a15a", "a15b", "a15c", "a15d", "a15e", "a15f", "a15g", "a15h", "a15i", "a15j",
+        "a16a", "a16b", "a16c", "a16d", "a16e", "a16f", "a16g", "a16h", "a16i", "a16j", "a16k", "a16l",
+        "a17a", "a17b", "a17c", "a17d", "a17e", "a17f", "a17g", "a17h", "a171h",
+        "a20a", "a20b", "a20c", "a20d", "a20e",
+        "a21a", "a21b", "a21c", "a21d", "a21e", "a211a",
+        "a22a", "a22b", "a22c", "a22d", "a222b",
+        "a23a", "a23b", "a23c", "a23d", "a23e", "a23f", "a23g", "a23h", "a23i", "a23j", "a23k",
+        "a24", "a40a", "a40b", "a40c", "a40d", "a111a", "a160k", "a162k", "a163k", "a166k"
+    ]
+    df = _drop_if_present(df, student_agg_cols_to_drop, "student-agg-source")
+
+    # Family aggregations
+    logger.info("family aggregations")
     df = _aggregate_mean(df, FAMILY_AGG_MEAN)
     df = _drop_if_present(df, FAMILY_AGG_DROP, "family-agg-source")
 
-    # 4. Teacher aggregations
-    logger.info("Step 4: teacher aggregations")
+    #  Teacher aggregations
+    logger.info(" teacher aggregations")
     # rescale inconsistent scale cols before aggregating
     for col in ["p331g", "p331j"]:
         if col in df.columns:
             df[col] = _normalize_col(df[col], old_min=1, old_max=5, new_min=1, new_max=4)
-    df = _aggregate_mean(df, TEACHER_AGG_MEAN)
-    df = _aggregate_sum(df,  TEACHER_AGG_SUM)
-    df = _drop_if_present(df, TEACHER_DROP, "teacher-agg-source/dep")
-    # drop whichever of p5/rep has more NaNs
+
+    # teacher drop logic directly from B to ensure parity
+    pfc_topics = ["p15a","p15b","p15c","p15d","p15e","p15f","p15g","p15h","p15i"]
+    class_problems = ["p26a","p26b","p26c","p26d"]
+    cols_to_drop = ["p27a", "p16h", "p19", "p23i", "p32e", "p41d", "p41e", "p41f", "p41j", "p299d", "p331j"]
+    cols_to_drop_dep = ["p12a", "p12c", "p13b", "p16d", "p16e", "p16b", "p16f", "p18c", "p18b", "p22b", "p22c", "p32d", "p32a", "p32c", "p34f", "p34e", "p34c", "p34a", "p34g", "p311h", "p311f", "p311g", "p331c", "p331b", "p331a"]
+    
+    df = _drop_if_present(df, pfc_topics + class_problems + cols_to_drop + cols_to_drop_dep, "teacher-pre-agg-drop")
+
+    #drop whichever of p5/rep has more NaNs
     if "p5" in df.columns and "rep" in df.columns:
         drop_col = "p5" if df["p5"].isna().sum() > df["rep"].isna().sum() else "rep"
         df = df.drop(columns=[drop_col])
         logger.info(f"  Dropped redundant repeater col: {drop_col}")
 
-    # 5. Rename
-    logger.info("Step 5: renaming columns")
+    # perform teacher mean aggregations
+    df = _aggregate_mean(df, TEACHER_AGG_MEAN)
+    df = _drop_if_present(df, TEACHER_DROP, "teacher-agg-source/dep")
+
+    # sum-based training indicators
+    df = _aggregate_sum(df, TEACHER_AGG_SUM)
+    p18_cols = ["p18a","p18b","p18c","p18d","p18e","p18f","p18g","p18h","p18i"]
+    df = _drop_if_present(df, p18_cols, "p18-agg-source")
+
+    # custom bitmask-based subjects taught indicator
+    p9_cols = ["p9a","p9b","p9c","p9d","p9e","p9f"]
+    if all(c in df.columns for c in p9_cols):
+        df["t_number_of_subjects_taught"] = df.apply(lambda r: _custom_binary_agg(r[p9_cols]), axis=1)
+    df = _drop_if_present(df, p9_cols, "p9-agg-source")
+
+    # mixed satisfaction indicators with direction scaling
+    p41_good = ["p41a", "p41b", "p41g", "p41h", "p41i"]
+    p41_bad = ["p41c"]
+    df["t_extent_of_satisfaction_job_and_school"] = df.apply(lambda r: _get_good_bad_agg(r, p41_good, p41_bad, 4), axis=1)
+    df = _drop_if_present(df, p41_good + p41_bad, "p41-agg-source")
+
+    p13_good = ["p13"]
+    p13_bad = ["p13c"]
+    df["t_extent_of_results_satisfaction"] = df.apply(lambda r: _get_good_bad_agg(r, p13_good, p13_bad, 4), axis=1)
+    df = _drop_if_present(df, p13_good + p13_bad, "p13-agg-source")
+
+    # rename
+    logger.info("renaming columns")
     df = df.rename(columns={k: v for k, v in RENAME_MAP.items() if k in df.columns})
 
-    # 6. Recode categoricals
-    logger.info("Step 6: recoding categoricals")
+    #Recode categoricals
+    logger.info("recoding categoricals")
     for col, mapping in RECODE_MAP.items():
         if col in df.columns:
             df[col] = df[col].map(lambda x: mapping.get(x, np.nan) if pd.notna(x) else np.nan)
 
-    # boolean cols
+    # boolean mapping
     for col in ["f_has_been_recommended_school", "t_enrolled_in_school_training_plan"]:
         if col in df.columns:
             df[col] = df[col].apply(lambda x: False if x == 2 else (True if x == 1 else np.nan))
 
-    # 7. Normalize extent/frequency cols
-    logger.info("Step 7: normalizing extent/frequency columns")
+    if "s_has_repeated" in df.columns:
+        df["s_has_repeated"] = df["s_has_repeated"].apply(lambda x: False if x == 1 else (True if x == 2 else np.nan))
+
+    #Normalize extent/frequency cols
+    logger.info(" normalizing extent/frequency columns")
     df = _normalize_extent_frequency_cols(df)
 
-    # 8. Drop high-NaN columns
-    logger.info(f"Step 8: dropping columns above {nan_threshold:.0%} NaN threshold")
+    #drop high-NaN columns
+    logger.info(f" dropping columns above {nan_threshold:.0%} NaN threshold")
     nan_fracs = nan_summary(df)["nan_fraction"]
     high_nan  = nan_fracs[nan_fracs > nan_threshold].index.tolist()
     logger.info(f"  Dropping {len(high_nan)} columns")
     df = _drop_if_present(df, high_nan, "high-NaN")
 
-    # 9. Extract target
+    #extract target
     if target_col not in df.columns:
         raise ValueError(f"Target '{target_col}' not found. Available score cols: {[c for c in ALL_SCORE_COLS if c in df.columns]}")
     y  = df[target_col].copy()
@@ -424,12 +550,12 @@ def preprocess(
     if drop_other_scores:
         df = _drop_if_present(df, [c for c in ALL_SCORE_COLS if c != target_col], "score-leakage")
 
-    # 10. Drop rows where target is NaN
+    #drop rows where target is NaN
     valid = y.notna()
     logger.info(f"  Dropping {(~valid).sum()} rows with NaN target")
     df, y = df[valid], y[valid]
 
-    # 11. Extract sensitive attribute
+    # extract sensitive attribute
     sensitive_col = "f_ESCS"
     sensitive = df[sensitive_col].copy() if sensitive_col in df.columns else pd.Series(np.nan, index=df.index, name=sensitive_col)
 
@@ -440,37 +566,12 @@ def preprocess(
 def build_percentile_target(
     score_train: pd.Series,
     score_test: pd.Series,
-    percentile: float = 75,
-    column_name: str = "target_high_perf",
+    percentile = 75,
+    column_name = "target_high_perf",
 ) -> tuple[pd.Series, pd.Series, float]:
     """
     Construct the binary "excellence" target by thresholding a continuous
-    performance score (e.g. score_MAT) at a given percentile, following
-    Marrero et al. (ECAI 2024).
-
-    The threshold is computed on ``score_train`` only and then applied to
-    both splits, to prevent test-set leakage. Call this AFTER the
-    train/test split (not before), since the split itself must be made on
-    the raw continuous score before any threshold exists.
-
-    Parameters
-    ----------
-    score_train, score_test : pd.Series
-        Continuous score column for the train / test rows respectively
-        (output of ``preprocess(..., target_col="score_MAT")``).
-    percentile : float
-        Percentile threshold; rows with score >= threshold are labelled
-        positive (e.g. 75 -> top quartile = "high performance").
-    column_name : str
-        Name assigned to the resulting binary series.
-
-    Returns
-    -------
-    y_train, y_test : pd.Series
-        Binary (0/1) target series, same index as the inputs.
-    threshold : float
-        The percentile value computed on score_train (log / persist this
-        for reproducibility — e.g. alongside config.yaml's ``target`` block).
+    performance score.
     """
     threshold = float(np.percentile(score_train.dropna(), percentile))
     y_train = (score_train >= threshold).astype(int).rename(column_name)
@@ -485,7 +586,7 @@ def build_percentile_target(
     return y_train, y_test, threshold
 
 
-@dataclass #NOTE
+@dataclass 
 class DataSplit:
     X_train: pd.DataFrame
     X_test: pd.DataFrame
@@ -493,13 +594,14 @@ class DataSplit:
     y_test: pd.Series
     protected_train: pd.DataFrame
     protected_test: pd.DataFrame
-    feature_names: list[str] = field(default_factory=list)
-    target_name: str = ""
-    protected_attrs: list[str] = field(default_factory=list)
+    feature_names = field(default_factory=list)
+    target_name = ""
+    protected_attrs = field(default_factory=list)
     encoders: dict[str, Any] = field(default_factory=dict)
-    scaler: Any = None
+    scaler = None
 
-def save_split(split: DataSplit, path):
+
+def save_split(split, path):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "wb") as f:
