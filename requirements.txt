@@ -10,6 +10,10 @@ sdv==1.37.2
 imbalanced-learn
 gdown==5.2.0
 
+# Fairness mitigation (Goal 3)
+fairlearn==0.14.0
+aif360==0.6.1
+
 # Notebook stack
 jupyter==1.1.1
 notebook==7.3.1

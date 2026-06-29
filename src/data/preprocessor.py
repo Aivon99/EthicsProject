@@ -15,7 +15,7 @@ import numpy as np
 
 logger = get_logger(__name__)
 
-# Columns (raw original.csv names)
+# Columns ( names of raw original.csv)
 
 IDENTIFIER_COLS = [
     "id_student", "id_questionnaire", "id_student_original",
@@ -594,11 +594,11 @@ class DataSplit:
     y_test: pd.Series
     protected_train: pd.DataFrame
     protected_test: pd.DataFrame
-    feature_names = field(default_factory=list)
-    target_name = ""
-    protected_attrs = field(default_factory=list)
+    feature_names: list[str] = field(default_factory=list)
+    target_name: str = ""
+    protected_attrs: list[str] = field(default_factory=list)
     encoders: dict[str, Any] = field(default_factory=dict)
-    scaler = None
+    scaler: Any = None
 
 
 def save_split(split, path):

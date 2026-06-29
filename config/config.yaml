@@ -92,9 +92,9 @@ dataset:
 # its score. Set enabled: false to disable entirely and keep all columns.
 feature_selection:
   enabled: true
-  method: mutual_info  # mutual_info | f_classif | variance
-  k: 60                # number of non-sensitive columns to keep
-  random_state: null   # null -> falls back to the top-level seed
+  method: mutual_info  # mutual_info or f_classif or variance
+  k: 25                # number of non-sensitive columns to keep
+  random_state: null   # falls back to the top-level seed
 
 # ---- Synthetic generation
 generation:
@@ -160,6 +160,32 @@ experiments:
       n_iter_no_change: 15
       learning_rate_init: 0.001
       batch_size: 256
+
+# ---- Fairness mitigation (Goal 3) --------------------------------------------
+# G3's mitigation section retrains/post-processes each (method, classifier) pair
+# against ONE protected attribute at a time (the loop is over
+# dataset.protected_attributes), using two independent techniques:
+#   - equalized_odds:    fairlearn ThresholdOptimizer (post-processing) -- wraps
+#                        any of the 3 classifiers with group-aware decision
+#                        thresholds. Grouping is the same median/2-value
+#                        binarisation src/evaluation/fairness.py uses to
+#                        *measure* DPD/EOD/DI, so mitigation target == metric target.
+#   - prejudice_remover: aif360 PrejudiceRemover (in-processing) -- its own
+#                        regularised logistic-regression-style model
+#                        (Kamishima et al. 2012), not parameterised by
+#                        `classifier` (one model per attribute/method pair).
+# Set enabled: false to skip this section entirely (fully revertible -- no
+# other code path changes).
+mitigation:
+  enabled: true
+  methods:
+    - equalized_odds
+    - prejudice_remover
+  equalized_odds:
+    grid_size: 1000   # ThresholdOptimizer search granularity
+  prejudice_remover:
+    eta: 1.0          # fairness regularisation strength (higher = fairer, less accurate)
+  random_state: null  # null -> falls back to the top-level seed
 
 # ---- MMD kernel settings -----------------------------------------------------
 mmd:
