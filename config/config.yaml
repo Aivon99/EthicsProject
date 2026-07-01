@@ -83,7 +83,7 @@ dataset:
     - p_public_or_private
     - p_island
 
-# ---- Feature selection (Goal 1) -----------------------------------------------
+# ---- Feature selection (Goal 1)
 # preprocess() keeps a large number of raw, never-aggregated questionnaire
 # columns (mostly principal/teacher survey items) that have no rename or
 # aggregation rule. select_features() (src/data/feature_selection.py) scores
@@ -127,13 +127,13 @@ generation:
   # File name template
   output_filename_template: "synthetic_{method}.csv"
 
-# ---- TSTR Experiment Configuration -------------------------------------------
+#  TSTR Experiment Configuration
 experiments:
   # The real-data baseline is always 
   # included as the first row ("real") in results.
   baseline_label: real
 
-  # ---- Classifiers -------------------------------------------------------------
+  # Classifiers 
   classifiers:
     logistic_regression:
       max_iter: 1000
@@ -161,21 +161,7 @@ experiments:
       learning_rate_init: 0.001
       batch_size: 256
 
-# ---- Fairness mitigation (Goal 3) --------------------------------------------
-# G3's mitigation section retrains/post-processes each (method, classifier) pair
-# against ONE protected attribute at a time (the loop is over
-# dataset.protected_attributes), using two independent techniques:
-#   - equalized_odds:    fairlearn ThresholdOptimizer (post-processing) -- wraps
-#                        any of the 3 classifiers with group-aware decision
-#                        thresholds. Grouping is the same median/2-value
-#                        binarisation src/evaluation/fairness.py uses to
-#                        *measure* DPD/EOD/DI, so mitigation target == metric target.
-#   - prejudice_remover: aif360 PrejudiceRemover (in-processing) -- its own
-#                        regularised logistic-regression-style model
-#                        (Kamishima et al. 2012), not parameterised by
-#                        `classifier` (one model per attribute/method pair).
-# Set enabled: false to skip this section entirely (fully revertible -- no
-# other code path changes).
+
 mitigation:
   enabled: true
   methods:
@@ -187,7 +173,7 @@ mitigation:
     eta: 1.0          # fairness regularisation strength (higher = fairer, less accurate)
   random_state: null  # null -> falls back to the top-level seed
 
-# ---- MMD kernel settings -----------------------------------------------------
+# MMD kernel settings
 mmd:
   kernel: rbf        # radial basis function kernel
   gamma: null        # null -> median heuristic (1 / (2 * median(pairwise distances)^2))
