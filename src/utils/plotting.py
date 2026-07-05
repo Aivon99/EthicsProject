@@ -556,6 +556,7 @@ def plot_per_attribute_fairness(
     -------
     matplotlib.figure.Figure
     """
+    fairness_df = fairness_df.loc[:, ~fairness_df.columns.duplicated()]
     sub = fairness_df[["attribute", metric]].dropna(subset=[metric])
     sub = sub.sort_values(metric, ascending=(metric != "di"))
 
