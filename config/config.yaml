@@ -129,9 +129,16 @@ generation:
 
 #  TSTR Experiment Configuration
 experiments:
-  # The real-data baseline is always 
+  # The real-data baseline is always
   # included as the first row ("real") in results.
   baseline_label: real
+
+  # Utility metrics computed per classifier/method (see src/evaluation/utility.py)
+  utility_metrics:
+    - balanced_accuracy
+    - f1_macro
+    - roc_auc
+    - mmd
 
   # Classifiers 
   classifiers:

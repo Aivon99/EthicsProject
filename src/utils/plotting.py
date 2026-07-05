@@ -274,7 +274,7 @@ def plot_utility_bar(
     """
     colors      = METHOD_COLORS
     classifiers = metrics_df["classifier"].unique().tolist()
-    methods     = [cfg["experiments"]["baseline_label"]] + cfg["generation"]["methods"]
+    methods     = [cfg["experiments"]["baseline_label"]] + list(cfg["generation"]["methods"])
     methods     = [m for m in methods if m in metrics_df["method"].unique()]
 
     x       = np.arange(len(classifiers))
@@ -342,7 +342,7 @@ def plot_fairness_bar(
     """
     colors      = METHOD_COLORS
     classifiers = metrics_df["classifier"].unique().tolist()
-    methods     = [cfg["experiments"]["baseline_label"]] + cfg["generation"]["methods"]
+    methods     = [cfg["experiments"]["baseline_label"]] + list(cfg["generation"]["methods"])
     methods     = [m for m in methods if m in metrics_df["method"].unique()]
 
     x       = np.arange(len(classifiers))
@@ -492,7 +492,7 @@ def plot_utility_fairness_scatter(
 
     fig, ax = plt.subplots(figsize=(8, 6))
 
-    for method in cfg["experiments"]["generation_methods"]:
+    for method in cfg["generation"]["methods"]:
         sub = plot_df[plot_df["method"] == method]
         for clf in classifiers:
             row = sub[sub["classifier"] == clf]
