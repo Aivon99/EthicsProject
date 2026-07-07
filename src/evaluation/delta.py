@@ -62,5 +62,5 @@ def get_utility_delta_columns(metrics_df: pd.DataFrame) -> list[str]:
 
 def get_fairness_delta_columns(metrics_df: pd.DataFrame) -> list[str]:
     """Return a list of delta column names that correspond to fairness metrics."""
-    fair_prefixes = ("delta_mean_dpd", "delta_mean_eod", "delta_mean_di")
+    fair_prefixes = ("delta_mean_dpd", "delta_mean_eod", "delta_mean_di", "delta_mean_odds_ratio")
     return [c for c in metrics_df.columns if c.startswith(fair_prefixes)]

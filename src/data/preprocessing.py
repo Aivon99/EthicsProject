@@ -15,7 +15,9 @@ def get_feature_columns(df: pd.DataFrame, cfg: dict[str, Any]) -> list[str]:
     """Return the feature column names to use for training and prediction.
 
     Excluded columns:
-    - target column
+    - target column (both the active one and its sibling task's target,
+      e.g. target_low_perf when target_high_perf is active, so one binary
+      task never leaks into the other via a shared saved CSV)
     - performance score / level columns (they leak the target)
     - administrative ID columns
 
@@ -30,10 +32,16 @@ def get_feature_columns(df: pd.DataFrame, cfg: dict[str, Any]) -> list[str]:
     -------
     list of column names ordered as they appear in *df*.
     """
-    exclude = set(
-        [cfg["dataset"]["target_column"]]
-        + cfg["dataset"]["performance_columns"]
-        + cfg["dataset"]["id_columns"]
+    target_names = {
+        cfg["dataset"]["target_column"],
+        cfg["target"]["column_name"],
+        cfg["target"].get("low_column_name"),
+    }
+    target_names.discard(None)
+    exclude = (
+        target_names
+        | set(cfg["dataset"]["performance_columns"])
+        | set(cfg["dataset"]["id_columns"])
     )
     features = [c for c in df.columns if c not in exclude]
     logger.debug("Feature columns (%d): %s", len(features), features)

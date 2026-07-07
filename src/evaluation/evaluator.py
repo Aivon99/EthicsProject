@@ -31,7 +31,7 @@ def score_predictions(
     fairness_df = compute_all_fairness_metrics(y_test, y_pred, protected_test, fairness_cfg)
 
     for _, frow in fairness_df.iterrows():
-        for m in ("dpd", "eod", "di"):
+        for m in ("dpd", "eod", "di", "odds_ratio"):
             metrics[f"{frow['attribute']}_{m}"] = frow[m]
     metrics.update(summarise_fairness(fairness_df))
 

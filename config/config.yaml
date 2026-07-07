@@ -29,13 +29,19 @@ paths:
 #  Reproducibility 
 seed: 42  # my fav
 
-#  Target variable 
+#  Target variable
 target:
   score_column:  score_MAT         # continuous score used to build the target
   percentile:    75                # positive class: score >= this percentile
   column_name:   target_high_perf  # name of the binary column
 
-# ---- Dataset schema 
+  # Symmetric "underperformance" task (Marrero et al. lower-tail detection):
+  # positive class = score <= this percentile. Built alongside target_high_perf
+  # in Notebook 01 so both tasks share one synthetic-generation run (Notebook 02).
+  low_percentile:   25
+  low_column_name:  target_low_perf
+
+# Dataset schema 
 dataset:
   # Target column (must match target.column_name above)
   target_column: target_high_perf
@@ -82,6 +88,10 @@ dataset:
     - f_frequency_of_see_adult_read
     - p_public_or_private
     - p_island
+    - target_low_perf  # binary; must be treated as categorical when it rides
+                        # along as a feature column during SMOTE generation
+                        # (target_high_perf is excluded from X by construction,
+                        # so it needs no entry here)
 
 # ---- Feature selection (Goal 1)
 # preprocess() keeps a large number of raw, never-aggregated questionnaire

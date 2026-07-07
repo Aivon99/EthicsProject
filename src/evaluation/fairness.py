@@ -89,6 +89,15 @@ def compute_fairness_for_attribute(
     else:
         results["di"] = float(min(rate_priv, rate_unpriv) / max(rate_priv, rate_unpriv))
 
+    # Equalized-odds odds-ratio (Marrero et al., ECAI 2024): recall of the
+    # unprivileged group relative to the privileged (reference) group.
+    #   ~1.0 -> fair (equal recall); <1.0 -> favours privileged group;
+    #   >1.0 -> favours unprivileged group.
+    if np.isnan(tpr_priv) or np.isnan(tpr_unpriv) or tpr_priv == 0:
+        results["odds_ratio"] = float("nan")
+    else:
+        results["odds_ratio"] = float(tpr_unpriv / tpr_priv)
+
     return results
 
 
@@ -139,7 +148,7 @@ def compute_all_fairness_metrics(
 def summarise_fairness(fairness_df: pd.DataFrame) -> dict[str, float]:
     """Return mean DPD, EOD, and DI across all protected attributes."""
     summary: dict[str, float] = {}
-    for metric in ("dpd", "eod", "di"):
+    for metric in ("dpd", "eod", "di", "odds_ratio"):
         if metric in fairness_df.columns:
             summary[f"mean_{metric}"] = float(fairness_df[metric].mean(skipna=True))
     return summary
