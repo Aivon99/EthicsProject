@@ -1,1 +1,6 @@
-controllo clone riuscito
+TODO
+
+
+> fix synth gen ,1,1 problem. 
+> used results for nb 5 
+>add considerations into nb s 
