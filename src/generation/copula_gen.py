@@ -7,6 +7,7 @@ import pandas as pd
 from sdv.single_table import GaussianCopulaSynthesizer
 from sdv.metadata import SingleTableMetadata
 
+from src.generation.constraints import add_target_exclusivity_constraint
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -47,6 +48,8 @@ def generate_gaussian_copula(
     synthesizer = GaussianCopulaSynthesizer(
         metadata=metadata
     )
+
+    add_target_exclusivity_constraint(synthesizer, cfg)
 
     synthesizer.fit(train_df)
 
