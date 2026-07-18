@@ -9,24 +9,15 @@ from src.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-# ---- Public functions --------------------------------------------------------
 def ensure_dir(path: str | Path) -> Path:
-    """Create *path* (and parents) if it does not already exist."""
+    """Create path (and parents) if it does not already exist."""
     p = Path(path)
     p.mkdir(parents=True, exist_ok=True)
     return p
 
 
 def save_csv(df: pd.DataFrame, path: str | Path) -> None:
-    """Save a DataFrame to CSV.
-
-    Parameters
-    ----------
-    df:
-        DataFrame to persist.
-    path:
-        Destination file path. Parent directories are created automatically.
-    """
+    """Save a DataFrame to CSV, creating parent directories."""
     p = Path(path)
     ensure_dir(p.parent)
     df.to_csv(p, index=False)
