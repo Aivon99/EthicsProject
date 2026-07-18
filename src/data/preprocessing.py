@@ -12,26 +12,7 @@ logger = get_logger(__name__)
 
 
 def get_feature_columns(df: pd.DataFrame, cfg: dict[str, Any]) -> list[str]:
-    """Return the feature column names to use for training and prediction.
-
-    Excluded columns:
-    - target column (both the active one and its sibling task's target,
-      e.g. target_low_perf when target_high_perf is active, so one binary
-      task never leaks into the other via a shared saved CSV)
-    - performance score / level columns (they leak the target)
-    - administrative ID columns
-
-    Parameters
-    ----------
-    df:
-        The DataFrame whose columns are inspected.
-    cfg:
-        Parsed configuration dict.
-
-    Returns
-    -------
-    list of column names ordered as they appear in *df*.
-    """
+    """Return feature columns, excluding both target columns, performance scores and id columns."""
     target_names = {
         cfg["dataset"]["target_column"],
         cfg["target"]["column_name"],
