@@ -533,29 +533,7 @@ def plot_per_attribute_fairness(
     save: bool = True,
     filename_suffix: str = "",
 ) -> plt.Figure:
-    """
-    Horizontal bar chart of a single fairness metric broken down by protected attribute.
-
-    Bars are coloured red when the value exceeds the acceptable threshold
-    (> 0.1 for DPD / EOD; < 0.8 for DI) and green otherwise.
-    A vertical reference line is drawn at 0.8 for DI (four-fifths rule).
-
-    Parameters
-    ----------
-    fairness_df : pd.DataFrame
-        Per-attribute fairness DataFrame from ``compute_all_fairness_metrics``.
-    metric : str
-        Column to plot: ``"dpd"``, ``"eod"``, or ``"di"``.
-    cfg : dict
-    title : str
-    save : bool
-    filename_suffix : str
-        Appended to the filename for disambiguation.
-
-    Returns
-    -------
-    matplotlib.figure.Figure
-    """
+    """Horizontal bar chart of one fairness metric per protected attribute, red when it fails the acceptable threshold (DPD/EOD > 0.1, DI < 0.8) and green otherwise."""
     fairness_df = fairness_df.loc[:, ~fairness_df.columns.duplicated()]
     sub = fairness_df[["attribute", metric]].dropna(subset=[metric])
     sub = sub.sort_values(metric, ascending=(metric != "di"))
@@ -569,9 +547,12 @@ def plot_per_attribute_fairness(
     fig, ax = plt.subplots(figsize=(12, 4))
     ax.barh(sub["attribute"], sub[metric], color=colors, alpha=0.85, edgecolor="white")
 
+    # Dashed line at the metric's acceptability threshold; green side is fair.
     if metric == "di":
-        ax.axvline(0.8, color="darkorange", lw=1.2, ls="--", label="4/5 rule (0.8)")
-        ax.legend(fontsize=9)
+        ax.axvline(0.8, color="darkorange", lw=1.2, ls="--", label="4/5 rule: DI >= 0.8 is fair")
+    else:
+        ax.axvline(0.1, color="darkorange", lw=1.2, ls="--", label=f"{metric.upper()} <= 0.1 is fair")
+    ax.legend(fontsize=9)
 
     ax.set_xlabel(metric.upper(), fontsize=10)
     ax.set_title(title or f"{metric.upper()} per Protected Attribute", fontweight="bold")
