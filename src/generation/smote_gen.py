@@ -12,39 +12,12 @@ from src.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-
-# Pub functions 
 def generate_smote(
     train_df: pd.DataFrame,
     cfg: dict[str, Any],
     output_path: str | Path,
 ) -> pd.DataFrame:
-    """
-    Apply SMOTENC oversampling to ``train_df`` and return a balanced dataset.
-
-    Note: unlike the SDV-based generators, SMOTE does not use metadata.
-    It requires only the DataFrame and the list of categorical column indices.
-
-    Parameters
-    ----------
-    train_df : pd.DataFrame
-        Real training data (id columns dropped, target column included).
-    cfg : dict
-        Full project configuration.
-    output_path : str or Path
-        Where to write the synthetic CSV.
-
-    Returns
-    -------
-    pd.DataFrame
-        Resampled dataset. Contains all original rows plus the new
-        synthetic minority-class rows. The class ratio will be 1:1.
-
-    Raises
-    ------
-    ValueError
-        If the target column is not binary.
-    """
+    """Oversample the minority class with SMOTENC to a 1:1 balance and save the result."""
     target_col   = cfg["dataset"]["target_column"]
     cat_cols_cfg = set(cfg["dataset"].get("categorical_columns", []))
     k_neighbors  = cfg["generation"]["methods"]["smote"]["k_neighbors"]
@@ -61,8 +34,7 @@ def generate_smote(
             f"SMOTE requires a binary target; '{target_col}' has {y.nunique()} unique values."
         )
 
-    # Encode categoricals for SMOTENC
-    # SMOTENC needs the positions (integer indices) of categorical columns.
+    # SMOTENC needs categorical columns label-encoded and their integer positions.
     X_encoded, encoders = _encode_categoricals(X, cat_cols_cfg)
     cat_indices = _get_cat_indices(X_encoded, cat_cols_cfg)
 
@@ -73,7 +45,7 @@ def generate_smote(
     
     logger.info(f"Categorical column indices: {cat_indices[:10]}")
 
-    # NOTE: SMOTENC requires no NaN values.
+    # SMOTENC cannot handle NaNs, so fill them only for the kNN step.
     X_encoded_filled, fill_values = _fill_nans_for_smote(X_encoded)
 
     logger.info(f"SMOTE: filled NaNs in {len(fill_values)} columns for kNN computation.")
@@ -109,17 +81,11 @@ def generate_smote(
 
 
 
-# ---- Internal helpers --------------------------------------------------------
 def _encode_categoricals(
     X: pd.DataFrame,
     cat_cols: set[str],
 ) -> tuple[pd.DataFrame, dict[str, dict]]:
-    """
-    Label-encode categorical columns to integers (required by SMOTENC).
-
-    Returns the encoded DataFrame and a dict of per-column encoders
-    (label -> int mappings) needed for decoding.
-    """
+    """Label-encode categorical columns to integers, returning the encoded frame and per-column mappings for decoding."""
     X_enc = X.copy()
     encoders: dict[str, dict] = {}
 
@@ -151,10 +117,7 @@ def _decode_categoricals(
     columns: list[str],
     encoders: dict[str, dict],
 ) -> pd.DataFrame:
-    """
-    Reverse the label encoding applied in ``_encode_categoricals``.
-    SMOTENC may interpolate integer codes; we round and clip before decoding.
-    """
+    """Reverse the label encoding, rounding and clipping interpolated codes back to valid labels."""
     if isinstance(X_resampled, np.ndarray):
         df = pd.DataFrame(X_resampled, columns=columns)
     else:
@@ -182,25 +145,7 @@ def _save(df: pd.DataFrame, path: str | Path) -> None:
 def _fill_nans_for_smote(
     X_encoded: pd.DataFrame,
 ) -> tuple[pd.DataFrame, dict]:
-    """
-    Fill NaN values so SMOTENC can compute kNN distances.
-
-    Strategy:
-    - Numerical columns with NaN: fill with the column median.
-    - Integer-encoded categorical columns (encoded with -1 for NaN by
-      _encode_categoricals): replace -1 with 0 (the first valid label code).
-
-    This is a local, SMOTE-internal operation. It does NOT modify the
-    original training DataFrame and does not constitute general dataset
-    imputation. We only fill NaNs temporarily for the kNN distance computation.
-    The resulting synthetic rows are brand-new interpolated points, not imputed
-    real rows.
-
-    Returns
-    -------
-    tuple[pd.DataFrame, dict]
-        (filled DataFrame, {column_name: fill_value_used})
-    """
+    """Fill NaNs (median for numerical, 0 for encoded categoricals) only for the kNN step; this is not dataset imputation."""
     X_filled = X_encoded.copy()
     fill_values: dict = {}
 

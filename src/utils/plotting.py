@@ -326,7 +326,7 @@ def plot_fairness_bar(
     """
     Grouped bar chart for a mean-fairness metric (e.g. ``"mean_dpd"``).
 
-    Thin wrapper around ``plot_utility_bar`` — same layout, different save name.
+    Thin wrapper around ``plot_utility_bar``: same layout, different save name.
 
     Parameters
     ----------

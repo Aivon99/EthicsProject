@@ -13,38 +13,16 @@ from src.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-
-# ---- Public functions --------------------------------------------------------
 def compute_fidelity_report(
     real_df: pd.DataFrame,
     synthetic_df: pd.DataFrame,
     cfg: dict[str, Any],
     method_name: str = "unknown",
 ) -> dict[str, Any]:
-    """
-    Compute a suite of fidelity metrics comparing ``synthetic_df`` to ``real_df``.
-
-    Parameters
-    ----------
-    real_df : pd.DataFrame
-        Real training data (assumes id columns dropped).
-    synthetic_df : pd.DataFrame
-        Synthetic data produced by a single generator.
-    cfg : dict
-        Project configuration.
-    method_name : str
-        Label for logging / reporting (e.g. ``"ctgan"``).
-
-    Returns
-    -------
-    dict
-        Keys: ``method``, ``n_real``, ``n_synthetic``, ``column_stats``,
-        ``kl_divergences``, ``mmd``, ``correlation_mae``.
-    """
+    """Compute column stats, KL divergences, MMD and correlation MAE comparing synthetic to real data."""
     logger.info(f"Computing fidelity report for method={method_name}")
 
     cat_cols = set(cfg["dataset"].get("categorical_columns", []))
-    # Also treat object columns as categorical
     cat_cols |= set(real_df.select_dtypes(include="object").columns)
 
     num_cols = [c for c in real_df.columns if c not in cat_cols]
@@ -57,26 +35,22 @@ def compute_fidelity_report(
         "n_synthetic": len(synthetic_df),
     }
 
-    # Column-wise statistics
     report["column_stats"] = _column_statistics(
         real_df, synthetic_df, num_cols_present, cat_cols_present
     )
 
-    # KL divergence for categorical columns
     report["kl_divergences"] = _kl_divergences(real_df, synthetic_df, cat_cols_present)
     mean_kl = (
         np.nanmean(list(report["kl_divergences"].values()))
-        if report["kl_divergences"] 
+        if report["kl_divergences"]
         else float("nan")
     )
 
-    # MMD for numerical columns
     report["mmd"] = _mmd_rbf(
         real_df[num_cols_present].dropna(),
         synthetic_df[num_cols_present].dropna(),
     ) if num_cols_present else float("nan")
 
-    # Correlation preservation
     report["correlation_mae"] = _correlation_mae(
         real_df[num_cols_present], synthetic_df[num_cols_present]
     ) if len(num_cols_present) >= 2 else float("nan")
@@ -116,20 +90,13 @@ def pprint_fidelity_report(report: dict[str, Any]) -> None:
     print(f"{'=' * 65}\n")
 
 
-
-# ---- Internal helpers --------------------------------------------------------
 def _column_statistics(
     real_df: pd.DataFrame,
     syn_df:  pd.DataFrame,
     num_cols: list[str],
     cat_cols: list[str],
 ) -> dict[str, Any]:
-    """
-    Compute column-wise descriptive statistics for real vs synthetic.
-
-    For numerical columns: mean, std, median, min, max.
-    For categorical columns: top-k value frequencies.
-    """
+    """Compute per-column mean/std/median for numerical columns and value frequencies for categoricals."""
     stats: dict[str, Any] = {"numerical": {}, "categorical": {}}
 
     for col in num_cols:
@@ -158,13 +125,7 @@ def _kl_divergences(
     cat_cols: list[str],
     eps: float = 1e-8,
 ) -> dict[str, float]:
-    """
-    Compute Marginal KL divergence as KL(P_real || P_synthetic) for each 
-    categorical column. It measures how much the category distribution
-    in the synthetic data diverges from the real data.
-    
-    We add a small epsilon to avoid log(0) for unseen categories.
-    """
+    """Per categorical column, compute KL(P_real || P_synthetic) with an epsilon to avoid log(0)."""
     kl_scores: dict[str, float] = {}
 
     for col in cat_cols:
@@ -179,7 +140,6 @@ def _kl_divergences(
         p /= p.sum()
         q /= q.sum()
 
-        # Compute total KL
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             kl = float(np.sum(kl_div(p, q)))
@@ -194,23 +154,12 @@ def _mmd_rbf(
     bandwidth: float | None = None,
     max_samples: int = 1000,
 ) -> float:
-    """
-    Compute the Maximum Mean Discrepancy (MMD) between real and synthetic
-    data using an RBF (Gaussian) kernel. It is zero iff real and synthetic
-    distributions are identical.
-
-    For computational tractability we subsample both sets to ``max_samples``
-    rows before computing the kernel matrices.
-
-    MMD^2 = E[k(x,x')] - 2 x E[k(x,y)] + E[k(y,y')]
-    where x ~ P_real, y ~ P_synthetic, k is the RBF kernel.
-    """
+    """RBF-kernel MMD between real and synthetic numerical data (0 = identical), subsampled for speed."""
     rng = np.random.default_rng(42)
 
     X = real_arr.fillna(0.0).values.astype(float)
     Y = syn_arr.fillna(0.0).values.astype(float)
 
-    # Subsample for speed
     if len(X) > max_samples:
         X = X[rng.choice(len(X), max_samples, replace=False)]
     if len(Y) > max_samples:
@@ -219,7 +168,7 @@ def _mmd_rbf(
     if X.shape[0] == 0 or Y.shape[0] == 0:
         return float("nan")
 
-    # Median heuristic for bandwidth if not supplied
+    # Median heuristic for the bandwidth when not supplied.
     if bandwidth is None:
         all_data = np.vstack([X, Y])
         dists = cdist(all_data, all_data, "sqeuclidean")
@@ -235,19 +184,14 @@ def _mmd_rbf(
     K_xy = rbf_kernel(X, Y)
 
     mmd2 = (K_xx.mean() - 2.0 * K_xy.mean() + K_yy.mean())
-    return float(max(mmd2, 0.0) ** 0.5)  # return MMD, not MMD^2
+    return float(max(mmd2, 0.0) ** 0.5)  # MMD, not MMD^2
 
 
 def _correlation_mae(
     real_df: pd.DataFrame,
     syn_df:  pd.DataFrame,
 ) -> float:
-    """
-    Compute the mean absolute error between the Spearman rank
-    correlation matrices of real and synthetic data.
-
-    Returns NaN if fewer than 2 valid numerical columns are present.
-    """
+    """Mean absolute error between the Spearman correlation matrices of real and synthetic data."""
     common_cols = [c for c in real_df.columns if c in syn_df.columns]
     if len(common_cols) < 2:
         return float("nan")
@@ -255,7 +199,6 @@ def _correlation_mae(
     r_corr = real_df[common_cols].corr(method="spearman").values
     s_corr = syn_df[common_cols].corr(method="spearman").values
 
-    # Use only upper triangle
     mask = np.triu(np.ones_like(r_corr, dtype=bool), k=1)
     diffs = np.abs(r_corr[mask] - s_corr[mask])
     return float(np.nanmean(diffs))

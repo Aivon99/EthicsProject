@@ -10,30 +10,12 @@ def compute_delta_matrix(
     metrics_df: pd.DataFrame,
     cfg: dict[str, Any],
 ) -> pd.DataFrame:
-    """Compute per-row deltas relative to the real-data baseline.
-
-    For each (method, classifier) pair the delta is the value minus the
-    corresponding value of the same classifier trained on real data.
-
-    Parameters
-    ----------
-    metrics_df:
-        Output of :func:`run_full_experiment_matrix` — one row per
-        (method, classifier).
-    cfg:
-        Parsed configuration dict (used to identify the baseline label).
-
-    Returns
-    -------
-    pd.DataFrame with the same index and ``method``/``classifier`` columns
-    as *metrics_df* plus additional ``delta_<metric>`` columns. The baseline
-    rows have delta = 0 by definition.
-    """
+    """Add delta_<metric> columns giving each row's change from the same classifier's real baseline."""
     baseline_label  = cfg["experiments"]["baseline_label"]
     numeric_cols    = metrics_df.select_dtypes(include="number").columns.tolist()
     delta_df        = metrics_df.copy()
 
-    # Build a lookup: classifier → baseline row.
+    # Lookup: classifier -> its baseline row.
     baseline_rows = (
         metrics_df[metrics_df["method"] == baseline_label]
         .set_index("classifier")[numeric_cols]
