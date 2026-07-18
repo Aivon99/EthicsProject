@@ -10,22 +10,8 @@ from src.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-# ---- Public functions
-
 def load_data(file_path, download_url = None):
-    """Load data from a CSV file, downloading it first if missing.
-
-    Parameters
-    ----------
-    file_path:
-        Local CSV path (e.g. ``cfg["paths"]["raw_data"]``). Unchanged default
-        behaviour when the file already exists there.
-    download_url:
-        Optional Google Drive share link (e.g. ``cfg["paths"]["raw_data_url"]``).
-        If ``file_path`` doesn't exist and a URL is given, the file is
-        downloaded to ``file_path`` first. Pass ``None`` (or leave the config
-        value empty) to disable the fallback.
-    """
+    """Load data from a CSV file, downloading it first if missing"""
     path = Path(file_path)
     if not path.exists():
         if not download_url:
@@ -45,12 +31,7 @@ def load_data(file_path, download_url = None):
         sys.exit(1)
 
 
-def _download_from_gdrive(url: str, dest: Path) -> None:
-    """Download ``url`` (a Google Drive share link) to ``dest`` via gdown.
-
-    gdown resolves the direct-download URL and the large-file confirmation
-    token automatically, which a plain ``requests.get`` does not.
-    """
+def _download_from_gdrive(url: str, dest: Path):
     import gdown
 
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -65,34 +46,9 @@ def _download_from_gdrive(url: str, dest: Path) -> None:
 def load_dataset(
     path: str | Path,
     cfg: dict[str, Any],
-    *,
     drop_id_columns: bool = True,
 ) -> pd.DataFrame:
-    """
-    Load a CSV dataset and perform basic schema validation.
-
-    Parameters
-    ----------
-    path : str or Path
-        Location of the CSV file.
-    cfg : dict
-        Configuration dict from ``load_config()``.
-    drop_id_columns : bool, default True
-        If True, columns listed under ``cfg["dataset"]["id_columns"]``
-        are dropped before returning. Identifier columns carry no
-        distributional signal and should not be passed to synthesizers.
-
-    Returns
-    -------
-    pd.DataFrame
-
-    Raises
-    ------
-    FileNotFoundError
-        If the CSV does not exist.
-    ValueError
-        If the target column or protected attributes are missing.
-    """
+    """Load a CSV, validate the schema, and optionally drop id columns."""
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(f"Dataset not found: {path}")
@@ -113,18 +69,7 @@ def load_dataset(
 
 
 def describe_dataset(df: pd.DataFrame, cfg: dict[str, Any]) -> None:
-    """
-    Print a concise human-readable summary of the dataset.
-
-    Covers: shape, dtypes, missing-value rates, and value-count summaries
-    for each protected attribute. Useful as the first cell of any notebook
-    that loads data.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-    cfg : dict
-    """
+    """Print shape, missing-value rates and protected-attribute value counts."""
     target = cfg["dataset"]["target_column"]
     protected = cfg["dataset"]["protected_attributes"]
 
@@ -135,7 +80,6 @@ def describe_dataset(df: pd.DataFrame, cfg: dict[str, Any]) -> None:
     print(f"  Target: '{target}'  ->  {df[target].value_counts().to_dict()}")
     print()
 
-    # Missing value overview
     missing = df.isnull().mean().sort_values(ascending=False)
     missing_nonzero = missing[missing > 0]
     if missing_nonzero.empty:
@@ -166,17 +110,7 @@ def describe_dataset(df: pd.DataFrame, cfg: dict[str, Any]) -> None:
 
 
 def load_real_data(cfg: dict[str, Any]) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Load the preprocessed real train and test splits.
-
-    Parameters
-    ----------
-    cfg:
-        Parsed configuration dict (from :func:`~src.utils.config.load_config`).
-
-    Returns
-    -------
-    (train_df, test_df)
-    """
+    """Load the preprocessed real train and test splits."""
     train_path = Path(cfg["paths"]["train_data"])
     test_path  = Path(cfg["paths"]["test_data"])
 
@@ -187,23 +121,7 @@ def load_real_data(cfg: dict[str, Any]) -> tuple[pd.DataFrame, pd.DataFrame]:
 
 
 def load_synthetic_dataset(cfg: dict[str, Any], method: str) -> pd.DataFrame:
-    """Load the synthetic training dataset for a given generation method.
-
-    The path is resolved from the config as:
-    ``{paths.synthetic_dir}/{output_subdirs[method]}/{output_filename_template}``
-
-    Parameters
-    ----------
-    cfg:
-        Parsed configuration dict.
-    method:
-        Generation method name: one of the keys in
-        ``cfg["generation"]["output_subdirs"]``.
-
-    Returns
-    -------
-    pd.DataFrame
-    """
+    """Load the synthetic training set for a given generation method."""
     synthetic_dir     = Path(cfg["paths"]["synthetic_dir"])
     output_subdirs    = cfg["generation"]["output_subdirs"]
     filename_template = cfg["generation"]["output_filename_template"]
@@ -217,18 +135,11 @@ def load_synthetic_dataset(cfg: dict[str, Any], method: str) -> pd.DataFrame:
 
 
 def load_all_synthetic_datasets(cfg: dict[str, Any]) -> dict[str, pd.DataFrame]:
-    """Load every synthetic dataset listed in the config.
-
-    Returns
-    -------
-    dict mapping method name -> DataFrame
-    """
+    """Load every synthetic dataset listed in the config, keyed by method name."""
     methods = list(cfg["generation"]["output_subdirs"].keys())
     return {m: load_synthetic_dataset(cfg, m) for m in methods}
 
 
-
-# ---- Internal helpers --------------------------------------------------------
 def _validate_schema(df: pd.DataFrame, cfg: dict[str, Any]) -> None:
     """Raise ValueError if required columns are missing from df."""
     target = cfg["dataset"]["target_column"]
