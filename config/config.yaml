@@ -90,7 +90,12 @@ dataset:
     - p_island
     - target_low_perf  # binary; must be treated as categorical when it rides
                         # along as a feature column during SMOTE generation
-                        
+    - target_high_perf  # symmetric case: rides along as a feature during the
+                         # smote_low_perf run (currently harmless only because
+                         # every low-perf-minority neighbour already has
+                         # target_high_perf=0 in the real data -- listing it
+                         # here removes the reliance on that coincidence)
+
 feature_selection:
   enabled: true
   method: mutual_info  # mutual_info or f_classif or variance
