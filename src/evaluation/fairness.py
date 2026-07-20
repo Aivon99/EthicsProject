@@ -9,6 +9,11 @@ from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+# Below this many true positives in a group, that group's TPR (and therefore
+# any odds_ratio built from it) is too noisy to report -- a single flipped
+# prediction can swing the ratio by 10-50x. See note.txt / project history.
+MIN_ODDS_RATIO_SUPPORT = 10
+
 
 
 # ---- Public functions --------------------------------------------------------
@@ -93,7 +98,16 @@ def compute_fairness_for_attribute(
     # unprivileged group relative to the privileged (reference) group.
     #   ~1.0 -> fair (equal recall); <1.0 -> favours privileged group;
     #   >1.0 -> favours unprivileged group.
-    if np.isnan(tpr_priv) or np.isnan(tpr_unpriv) or tpr_priv == 0:
+    support_priv_pos   = int((priv_mask & (y_true_v == 1)).sum())
+    support_unpriv_pos = int((unpriv_mask & (y_true_v == 1)).sum())
+    results["support_priv_pos"]   = support_priv_pos
+    results["support_unpriv_pos"] = support_unpriv_pos
+
+    low_support = (
+        support_priv_pos < MIN_ODDS_RATIO_SUPPORT
+        or support_unpriv_pos < MIN_ODDS_RATIO_SUPPORT
+    )
+    if np.isnan(tpr_priv) or np.isnan(tpr_unpriv) or tpr_priv == 0 or low_support:
         results["odds_ratio"] = float("nan")
     else:
         results["odds_ratio"] = float(tpr_unpriv / tpr_priv)

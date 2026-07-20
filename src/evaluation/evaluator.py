@@ -27,6 +27,12 @@ def score_predictions(
     """
     metrics = compute_utility_metrics(y_test, y_pred, y_prob)
 
+    # A classifier that predicts a single class for every test row makes DPD/EOD
+    # trivially 0 and DI/odds_ratio NaN -- indistinguishable from "perfectly fair"
+    # unless flagged. balanced_accuracy == 0.5 is the same signature but this is
+    # cheaper and doesn't depend on the class-imbalance level.
+    metrics["degenerate_predictions"] = bool(len(np.unique(y_pred)) < 2)
+
     fairness_cfg = {**cfg, "fairness_attributes_subset": protected_attrs}
     fairness_df = compute_all_fairness_metrics(y_test, y_pred, protected_test, fairness_cfg)
 
