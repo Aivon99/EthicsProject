@@ -1,6 +1,106 @@
 TODO
 
 
-> fix synth gen ,1,1 problem. 
-> used results for nb 5 
->add considerations into nb s 
+> fix synth gen ,1,1 problem.
+  DONE - add_target_exclusivity_constraint (src/generation/constraints.py) is wired
+  into ctgan_gen/tvae_gen/copula_gen, verified 0 violating rows in all 5 current
+  synthetic CSVs (ctgan, tvae, copula, smote, smote_low_perf).
+> used results for nb 5
+> add considerations into nb s
+
+--- 2026-07-19: code fixes applied (src/ + config.yaml + G3 notebooks only, G4 series untouched on purpose) ---
+
+DONE
+- config.yaml: added target_high_perf to categorical_columns (symmetric to the
+  existing target_low_perf entry) so it's explicitly protected from SMOTE's
+  continuous-feature interpolation during the smote_low_perf run, instead of
+  only being correct by coincidence (every low-perf-minority neighbour already
+  has target_high_perf=0 in real data). Should regenerate smote_low_perf once
+  to be safe, low cost (SMOTENC, no NN training).
+- src/data/preprocessing.get_feature_columns(): added exclude_missingness_flags
+  param. When True, also drops the {attr}_was_nan columns G1 adds for protected
+  attributes it deliberately never imputes -- those flags are proxies for
+  protected-attribute missingness and can leak signal back in for
+  fairness-sensitive callers. Default False, so G4's existing call is unchanged.
+- G3.ipynb / G3_LowPerf.ipynb: replaced the notebook-local make_feature_matrix
+  duplicate with a call to the shared get_feature_columns(..., exclude_missingness_flags=True).
+  Verified this is a pure refactor (same 33 feature columns as before) since
+  train.csv has no performance_columns/id_columns left to additionally exclude.
+  Cell 7 outputs cleared in both notebooks pending re-run.
+- src/evaluation/fairness.py: odds_ratio now NaNs out when either group has
+  fewer than MIN_ODDS_RATIO_SUPPORT=10 true positives behind its TPR estimate
+  (was blowing up to 10-50x from single-flipped-prediction noise on thin
+  subgroups). Added support_priv_pos/support_unpriv_pos diagnostic columns to
+  the per-attribute fairness detail df.
+- src/evaluation/evaluator.py score_predictions(): added a degenerate_predictions
+  bool column -- flags rows where the classifier predicted a single class for
+  the entire test set (previously showed up as suspicious "perfectly fair"
+  0.0/NaN DPD/EOD/DI, e.g. gaussian_copula|mlp in both G3_LowPerf and G4).
+
+NOT DONE YET / explicitly deferred
+- G4.ipynb, G4_LowPerf.ipynb: NOT touched (per instruction). They still use the
+  old get_feature_columns() call (40 features, was_nan flags included) and won't
+  see the odds_ratio/degenerate_predictions improvements until re-run against
+  current src/. Decide + apply exclude_missingness_flags=True there too when
+  we're ready to touch G4.
+- G3.ipynb, G3_LowPerf.ipynb, G4.ipynb, G4_LowPerf.ipynb all need a full re-run:
+  the first two because of the code changes above, all four because the
+  synthetic CSVs were regenerated 2026-07-18 (01:23-02:36) and only
+  G3_LowPerf's last run (17:52-17:57 same day) postdates that regeneration.
+- mitigation.py: the "IndexError: too many indices for array: array is
+  1-dimensional, but 2 were indexed" seen in G3_LowPerf's mitigation loop
+  (prejudice_remover, ctgan onward) is still unexplained -- MitigatedEvaluator
+  already guards against degenerate groups/labels in training data (evaluator.py
+  ~155-181), so this is a different, deeper aif360 edge case. Needs a fresh
+  repro once notebooks are re-run against current data; may or may not still
+  occur.
+- MLP is the weakest/least stable classifier throughout (lowest real baseline BA,
+  occasional majority-class collapse) -- likely under-tuned hyperparameters
+  rather than a synthetic-data signal. Not fixed; consider tuning or explicitly
+  caveating MLP-derived conclusions.
+- MMD does not reliably predict downstream TSTR utility (holds on excellence
+  task, breaks on low-perf task). Not a code issue -- just don't state "closer
+  MMD -> better utility" as a general claim in the report.
+
+--- 2026-07-21: output-path consistency fix (G3, G3_LowPerf, G4, G4_LowPerf, G5) ---
+
+Context: G3/G4 saved CSVs to different roots (results/ vs results/experiments/) but
+BOTH wrote figures straight to results/figures/ with identical filenames
+(mmd_comparison.png, utility_*.png, fairness_mean_*.png, delta_heatmap_*.png,
+scatter_utility_vs_fairness.png) -- confirmed via mtimes that G4's 2026-07-20 run
+silently overwrote G3's same-day figures. Also found G4's saved metrics_matrix.csv
+was missing degenerate_predictions entirely and had 0/120 odds_ratio NaN
+suppressions vs G3's 32/120, despite a fresh file timestamp -- strong evidence G4
+was run in a kernel that imported src/evaluation/* BEFORE the 07-19 fixes and was
+never restarted, so it kept silently running old code. Flag this again after the
+next G4 rerun -- confirm `degenerate_predictions` actually shows up this time.
+
+DONE
+- Every notebook's config-setup cell now overrides both paths.results_dir (or
+  experiments_dir for G4) and paths.figures_dir to a dedicated, fully disjoint
+  sub-directory, split first by mitigation status then by task:
+    results/mitigation/high_perf/        <- G3.ipynb
+    results/mitigation/low_perf/         <- G3_LowPerf.ipynb
+    results/no_mitigation/high_perf/     <- G4.ipynb
+    results/no_mitigation/low_perf/      <- G4_LowPerf.ipynb
+  and the figures equivalents under results/figures/{mitigation,no_mitigation}/{task}/.
+  Verified all four resolve to disjoint paths (no shared prefix) by simulating the
+  path-resolution logic against the real config.yaml. All four edited cells compile
+  (syntax-checked), not yet executed.
+- G5_Cross_Comparison.ipynb updated to read from the new locations
+  (MITIGATION_DIRS / NO_MITIGATION_DIRS dict per task) instead of the old
+  results/ + results/experiments/ paths. All of G5's code-cell outputs cleared
+  since they depend on paths that don't exist until G3/G4/LowPerf are rerun.
+
+NOT DONE YET
+- The old files at the previous locations (results/goal3_results.csv,
+  results/goal3_mitigation_*.csv, results/low_perf/*, results/experiments/*,
+  results/figures/*.png at the old flat paths) were left in place, not deleted --
+  they'll look like stale duplicates once the new paths are populated. Clean up
+  manually once the new layout is confirmed working.
+- G3/G3_LowPerf/G4/G4_LowPerf/G5 all need a full re-run (Restart Kernel & Run All,
+  not just "Run All" in a live kernel -- see the stale-import note above) before
+  the new paths get populated and G5 can run again.
+- The known feature-set difference between G3 (33 features, was_nan excluded) and
+  G4 (40 features, was_nan included) was deliberately left as-is per instruction --
+  not a path issue, already tracked above.
