@@ -7,56 +7,22 @@ from typing import Any
 
 
 
-# ---- Public functions --------------------------------------------------------
 def load_config(config_path: str | Path = "../config/config.yaml") -> dict[str, Any]:
-    """
-    Load the YAML configuration file and relative paths.
-
-    Parameters
-    ----------
-    config_path : str or Path
-        Explicit path to config.yaml.
-
-    Returns
-    -------
-    dict
-        Fully resolved configuration dictionary.  All values under the
-        ``paths`` key are ``pathlib.Path`` objects pointing at real
-        (or future) filesystem locations.
-    """
+    """Load config.yaml and resolve every value under `paths` to an absolute Path."""
     resolved_config_path = Path(config_path).resolve()
     project_root = resolved_config_path.parent.parent
 
     with open(resolved_config_path, "r", encoding="utf-8") as fh:
         cfg = yaml.safe_load(fh)
 
-    # Store the resolved project root for downstream use
     cfg["project_root"] = project_root
-
-    # Resolve all path strings to absolute Path objects
     cfg["paths"] = _resolve_paths(cfg.get("paths", {}), project_root)
 
     return cfg
 
 
 def get_synthetic_output_path(cfg: dict, method: str) -> Path:
-    """
-    Return the full path where synthetic data for a
-    given generation method should be written.
-
-    Parameters
-    ----------
-    cfg : dict
-        Configuration dict returned by ``load_config()``.
-    method : str
-        One of ``ctgan``, ``tvae``, ``gaussian_copula``, ``smote``.
-
-    Returns
-    -------
-    pathlib.Path
-        Full path to the output CSV, e.g.
-        ``<project_root>/data/synthetic/ctgan/synthetic_ctgan.csv``.
-    """
+    """Return the output CSV path for a given generation method, creating its directory."""
     subdirs = cfg["generation"]["output_subdirs"]
     filename_template = cfg["generation"]["output_filename_template"]
 
@@ -68,20 +34,14 @@ def get_synthetic_output_path(cfg: dict, method: str) -> Path:
     return output_path
 
 
-
-# ---- Internal helpers --------------------------------------------------------
 def _resolve_paths(paths_section: dict, project_root: Path) -> dict:
-    """
-    Recursively resolve all string values in the paths section to
-    absolute pathlib.Path objects.
-    """
+    """Recursively resolve string path values to absolute Path objects."""
     resolved: dict[str, Any] = {}
     for key, value in paths_section.items():
         if isinstance(value, str):
             if value == "":
-                # Empty string means "unset" (e.g. raw_data_url left blank to
-                # disable the download fallback) -- resolving it would turn it
-                # into project_root, which is truthy and breaks that contract.
+                # Empty string means "unset" (e.g. blank raw_data_url); keep it
+                # as-is so it stays falsy rather than resolving to project_root.
                 resolved[key] = value
             else:
                 p = Path(value)

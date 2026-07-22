@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from src.evaluation.utility import compute_utility_metrics, compute_mmd, column_correlation_delta, utility_delta
-from src.evaluation.fairness import compute_all_fairness_metrics, summarise_fairness
+from src.evaluation.fairness import compute_all_fairness_metrics, summarise_fairness, _binarise_attribute
 from src.evaluation.mitigation import fit_predict_equalized_odds, fit_predict_prejudice_remover
 from src.models.classifiers import build_classifier
 from src.data.preprocessor import DataSplit
@@ -27,11 +27,17 @@ def score_predictions(
     """
     metrics = compute_utility_metrics(y_test, y_pred, y_prob)
 
+    # A classifier that predicts a single class for every test row makes DPD/EOD
+    # trivially 0 and DI/odds_ratio NaN -- indistinguishable from "perfectly fair"
+    # unless flagged. balanced_accuracy == 0.5 is the same signature but this is
+    # cheaper and doesn't depend on the class-imbalance level.
+    metrics["degenerate_predictions"] = bool(len(np.unique(y_pred)) < 2)
+
     fairness_cfg = {**cfg, "fairness_attributes_subset": protected_attrs}
     fairness_df = compute_all_fairness_metrics(y_test, y_pred, protected_test, fairness_cfg)
 
     for _, frow in fairness_df.iterrows():
-        for m in ("dpd", "eod", "di"):
+        for m in ("dpd", "eod", "di", "odds_ratio"):
             metrics[f"{frow['attribute']}_{m}"] = frow[m]
     metrics.update(summarise_fairness(fairness_df))
 
@@ -135,10 +141,50 @@ class MitigatedEvaluator:
         technique: str,
         target_attr: str,
         method_name: str,
+        attr_train: pd.Series,
         classifier_name: str | None = None,
     ) -> dict:
-        attr_train = self.split.protected_train[target_attr]
+        """
+        Parameters
+        ----------
+        attr_train : pd.Series
+            Raw (unbinarised) protected-attribute values row-aligned with
+            ``X_train``/``y_train``. Must come from whatever data source is
+            actually being trained on -- ``self.split.protected_train`` only
+            matches the real training set; a synthetic training set (e.g.
+            SMOTE's class-balanced output) has a different row count and
+            needs its own protected-attribute column, not the real one.
+        """
         attr_test = self.split.protected_test[target_attr]
+
+        # Both fairlearn and aif360 assume the sensitive attribute has both
+        # groups present in the training data, and that each group has both
+        # label classes present. Neither assumption holds in general for a
+        # synthetic training set -- SMOTE only interpolates within the
+        # minority class, so a subgroup can vanish or come out label-uniform.
+        # fairlearn raises a clean ValueError for the label case; aif360
+        # doesn't validate at all and fails with an opaque IndexError deep in
+        # its matrix code for the group-collapse case (_binarise_attribute
+        # maps a single-valued raw attribute to an all-1s column). Check both
+        # conditions upfront so every technique fails the same clean,
+        # catchable way instead of surfacing a library-specific crash.
+        group_arr = _binarise_attribute(attr_train).to_numpy(dtype=float, na_value=np.nan)
+        valid = ~np.isnan(group_arr)
+        groups_present = np.unique(group_arr[valid])
+        if len(groups_present) < 2:
+            raise ValueError(
+                f"Degenerate sensitive attribute '{target_attr}' for method '{method_name}': "
+                f"only one group present after binarisation in the training data."
+            )
+        y_train_valid = np.asarray(y_train)[valid]
+        group_valid = group_arr[valid]
+        for g in groups_present:
+            y_group = y_train_valid[group_valid == g]
+            if len(np.unique(y_group)) < 2:
+                raise ValueError(
+                    f"Degenerate labels for '{target_attr}' group {g!r} (method '{method_name}'): "
+                    f"only one class present in the training data."
+                )
 
         if technique == "equalized_odds":
             if classifier_name is None:

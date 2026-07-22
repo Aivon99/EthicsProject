@@ -3,23 +3,9 @@ import logging
 
 
 def get_logger(name: str, level: int = logging.INFO) -> logging.Logger:
-    """
-    Return a module-level logger with a consistent format.
-
-    Parameters
-    ----------
-    name : str
-        Typically ``__name__`` of the calling module.
-    level : int
-        Logging level (default: INFO).
-
-    Returns
-    -------
-    logging.Logger
-    """
+    """Return a module-level logger with a consistent stdout format."""
     logger = logging.getLogger(name)
 
-    # Avoid adding duplicate handlers if the logger already exists
     if not logger.handlers:
         handler = logging.StreamHandler(sys.stdout)
         fmt = logging.Formatter(

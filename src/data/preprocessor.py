@@ -607,10 +607,4 @@ def save_split(split, path):
     with open(path, "wb") as f:
         pickle.dump(split, f)
     logger.info(f"DataSplit saved to {path}.")
-
-
-def load_split(path) -> DataSplit:
-    with open(path, "rb") as f:
-        split = pickle.load(f)
-    logger.info(f"DataSplit loaded from {path}.")
     return split
