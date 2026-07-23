@@ -1,5 +1,6 @@
 from .config import load_config, get_synthetic_output_path
 from .logging import get_logger
+from .prerequisites import check_prerequisites
 from .plotting import (
     plot_marginal_distributions,
     plot_fidelity_summary,
@@ -17,6 +18,7 @@ __all__ = [
     "load_config",
     "get_synthetic_output_path",
     "get_logger",
+    "check_prerequisites",
     "plot_marginal_distributions",
     "plot_fidelity_summary",
     "plot_class_balance",
