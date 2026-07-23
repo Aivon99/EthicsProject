@@ -117,10 +117,20 @@ def select_features(
     scores_df["selected"] = scores_df.index < k
 
     top_k = set(scores_df.loc[scores_df["selected"], "column"])
+    protected_present = [c for c in X_train.columns if c in protected_attrs]
     selected = [c for c in X_train.columns if c in protected_attrs or c in top_k]
 
+    if len(protected_present) < len(protected_attrs):
+        missing = sorted(set(protected_attrs) - set(protected_present))
+        logger.warning(
+            "%d/%d configured protected attributes are absent from X_train and cannot "
+            "be kept regardless of score: %s",
+            len(protected_attrs) - len(protected_present), len(protected_attrs), missing,
+        )
+
     logger.info(
-        "Feature selection (%s): kept %d/%d non-sensitive candidates + %d protected attrs -> %d total columns.",
-        method, len(top_k), len(candidates), len(protected_attrs), len(selected),
+        "Feature selection (%s): kept %d/%d non-sensitive candidates + %d/%d protected attrs "
+        "-> %d total columns.",
+        method, len(top_k), len(candidates), len(protected_present), len(protected_attrs), len(selected),
     )
     return selected, scores_df

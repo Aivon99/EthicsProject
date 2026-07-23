@@ -168,6 +168,12 @@ RENAME_MAP = {
     "ESCS": "f_ESCS",
     "mother_occupation": "f_mother_occupation",
     "father_occupation": "f_father_occupation",
+    # principal / school -- these three are configured protected attributes
+    # (dataset.protected_attributes in config.yaml) and previously had no
+    # rename entry at all, so they could never match their configured name.
+    "island":         "p_island",
+    "public_private": "p_public_or_private",
+    "d14":            "p_percentage_of_teachers_changed_school_last_year",
     # teacher
     "p2":   "t_gender",
     "p2n":  "t_age",
@@ -366,9 +372,19 @@ def preprocess(
     target_col= "level_MAT",
     nan_threshold = DEFAULT_NAN_THRESHOLD,
     drop_other_scores = True,
+    sensitive_cols = None,
 ) -> tuple[pd.DataFrame, pd.Series, pd.Series]:
     """
     Preprocess original.csv into (X, y, sensitive).
+
+    Parameters
+    ----------
+    sensitive_cols:
+        Configured protected-attribute names (post-rename). Exempted from the
+        >NaN-threshold column drop (step 8) -- without this, a protected
+        attribute can be silently dropped here before select_features()'s own
+        "always keep protected attributes" exemption ever gets a chance to
+        apply downstream.
 
     Steps
     -----
@@ -538,6 +554,11 @@ def preprocess(
     logger.info(f" dropping columns above {nan_threshold:.0%} NaN threshold")
     nan_fracs = nan_summary(df)["nan_fraction"]
     high_nan  = nan_fracs[nan_fracs > nan_threshold].index.tolist()
+    protected = set(sensitive_cols or [])
+    exempted  = [c for c in high_nan if c in protected]
+    high_nan  = [c for c in high_nan if c not in protected]
+    if exempted:
+        logger.info(f"  Exempting {len(exempted)} protected attribute(s) from the drop: {exempted}")
     logger.info(f"  Dropping {len(high_nan)} columns")
     df = _drop_if_present(df, high_nan, "high-NaN")
 
