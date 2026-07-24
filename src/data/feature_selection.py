@@ -16,59 +16,41 @@ _METHODS = ("mutual_info", "f_classif", "variance")
 def select_features(
     X_train: pd.DataFrame,
     y_train: pd.Series,
-    protected_attrs: list[str],
+    protected_attrs,
     cfg: dict[str, Any],
 ) -> tuple[list[str], pd.DataFrame]:
-    """Select the most informative non-sensitive features for downstream modelling.
+    """Select the most informative non-sensitive features for modelling
 
-    Why this exists
-    ----------------
+    
     ``preprocess()`` keeps a large number of raw, never-aggregated survey-item
     columns (mostly from the principal/teacher questionnaires) that pass
     through untouched because they aren't covered by any rename/aggregation
     rule. Feeding all of them to classifiers and synthetic-data generators
-    (CTGAN/TVAE) adds noise and dimensionality without adding signal. This
-    function scores every *non-sensitive* candidate column's relevance to the
-    target and keeps only the top ``k``, while always keeping every
-    configured protected attribute regardless of its score -- they're needed
-    for fairness auditing whether or not they're individually predictive.
-
-    Fit on the training split only (``X_train``/``y_train``) to avoid any
+    (CTGAN/TVAE) adds noise and dimensionality without adding signal.
+    
+    This function scores every non-sensitive column's relevance to the
+    target and keeps only the top k, while always keeping every
+    configured protected attribute regardless of its score.
+ 
+    Fit on the training split only to avoid any
     test-set leakage into the selection decision.
-
-    Controlled entirely via ``cfg["feature_selection"]``:
-
-    .. code-block:: yaml
-
+ 
+ 
+ 
         feature_selection:
           enabled: true
           method: mutual_info   # mutual_info | f_classif | variance
-          k: 60                 # number of non-sensitive columns to keep
+          k                     # number of non-sensitive columns to keep
           random_state: null    # falls back to cfg["seed"]
+    
+    Gives back: 
 
-    Set ``enabled: false`` to disable entirely and keep every column
-    (fully revertible -- no other code path changes).
-
-    Parameters
-    ----------
-    X_train:
-        Training feature matrix (already imputed; sensitive columns may
-        still contain NaNs by design -- they are excluded from scoring).
-    y_train:
-        Training target (binary).
-    protected_attrs:
-        Columns to always keep, never score/drop.
-    cfg:
-        Parsed configuration dict.
-
-    Returns
-    -------
     selected_columns:
-        ``protected_attrs`` + the top-``k`` scored candidates, in
+        ``protected_attrs`` + the top-k scored candidates, in
         ``X_train``'s original column order.
     scores_df:
         One row per candidate column with its score and whether it was
-        selected -- saved by the caller for transparency/manual review.
+        selected for checks.
         Empty if feature selection is disabled.
     """
     fs_cfg = cfg.get("feature_selection", {})
@@ -90,8 +72,7 @@ def select_features(
 
     X_cand = X_train[candidates].copy()
 
-    # Encode categoricals for scoring purposes only -- this does not affect
-    # the dtype/encoding of the columns actually returned to the caller.
+    # Encode categoricals for scoring purposes only 
     cat_cols = X_cand.select_dtypes(include="object").columns.tolist()
     if cat_cols:
         encoder = OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=-1)

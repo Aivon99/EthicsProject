@@ -16,11 +16,7 @@ def _is_boolean(series: pd.Series) -> bool:
     return set(non_null.unique()).issubset({True, False, 0, 1})
 
 
-def _is_ordinal_integer(series: pd.Series) -> bool:
-    """
-    Heuristic: integer dtype with few unique values => treat as ordinal/Likert.
-    We use <=10 unique values as the cutoff.
-    """
+def _is_ordinal_integer(series: pd.Series):
     if series.dtype not in [np.int64, np.float64, "Int64"]:
         return False
     n_unique = series.nunique(dropna=True)
@@ -37,24 +33,12 @@ def impute(
     """
     Impute missing values in X.
 
-    Rules
-    -----
     - Sensitive cols      : never imputed; a boolean missingness flag col is added instead
     - Categorical (object): NaN → "UNKNOWN"
     - Boolean             : NaN → mode
     - Ordinal integer     : NaN → mode  (Likert scales, small-range integers)
     - Continuous float    : NaN → median
-
-    Parameters
-    ----------
-    X               : feature dataframe (output of preprocess())
-    sensitive_cols  : columns to flag but not impute
-
-    Returns
-    -------
-    X_imputed   : dataframe with NaNs filled
-    flag_df     : boolean dataframe of which sensitive values were originally NaN
-                  (same index as X_imputed, one col per sensitive col that had NaNs)
+    
     """
     df = X.copy()
     flag_cols = {}
@@ -68,21 +52,21 @@ def impute(
         if n_nan == 0:
             continue
 
-        # ── Sensitive: flag only, never impute ───────────────────────────────
+        #  Sensitive: flag only, never impute 
         if col in sensitive_cols:
             flag_cols[f"{col}_was_nan"] = df[col].isna()
             n_flagged += 1
             logger.info(f"  [FLAG]    {col:<45} {n_nan} NaNs ({n_nan/len(df):.1%})")
             continue
 
-        # ── Categorical ───────────────────────────────────────────────────────
+        #  Categorical
         if _is_categorical(df[col]):
             df[col] = df[col].fillna("UNKNOWN")
             n_imputed += 1
             logger.info(f"  [CAT]     {col:<45} {n_nan} NaNs → 'UNKNOWN'")
             continue
 
-        # ── Boolean ───────────────────────────────────────────────────────────
+        #  Boolean
         if _is_boolean(df[col]):
             mode_val = df[col].mode(dropna=True)
             if len(mode_val) > 0:
@@ -91,7 +75,7 @@ def impute(
                 logger.info(f"  [BOOL]    {col:<45} {n_nan} NaNs → mode={mode_val[0]}")
             continue
 
-        # ── Ordinal integer ───────────────────────────────────────────────────
+        # Ordinal integer
         if _is_ordinal_integer(df[col]):
             mode_val = df[col].mode(dropna=True)
             if len(mode_val) > 0:
@@ -100,7 +84,7 @@ def impute(
                 logger.info(f"  [ORD]     {col:<45} {n_nan} NaNs → mode={mode_val[0]:.0f}")
             continue
 
-        # ── Continuous ────────────────────────────────────────────────────────
+        #  Continuous 
         median_val = df[col].median(skipna=True)
         df[col] = df[col].fillna(median_val)
         n_imputed += 1
@@ -120,14 +104,13 @@ def impute(
 
 
 def imputation_report(
-    X_before: pd.DataFrame,
-    X_after: pd.DataFrame,
-    flag_df: pd.DataFrame,
-    sensitive_cols: list[str],
-) -> pd.DataFrame:
+    X_before,
+    X_after,
+    flag_df,
+    sensitive_cols,
+) :
     """
-    Returns a tidy summary dataframe comparing NaN counts before and after imputation.
-    Useful for notebook display.
+    Returns a summary dataframe comparing NaN counts before and after imputation.
     """
     before = X_before.isna().sum().rename("nan_before")
     after  = X_after.isna().sum().rename("nan_after")

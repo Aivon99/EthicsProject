@@ -4,13 +4,10 @@ import pickle
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, OrdinalEncoder, StandardScaler
-
 from src.utils import get_logger, load_config
-
 import numpy as np
 
 logger = get_logger(__name__)
@@ -333,7 +330,7 @@ def bin_escs(series):
     return pd.cut(series, bins=ESCS_BINS, labels=ESCS_LABELS)
 
 
-def fit_feature_encoders(X_train: pd.DataFrame):
+def fit_feature_encoders(X_train):
     """Fit OrdinalEncoder on categorical cols, StandardScaler on numerical."""
     cat_cols = X_train.select_dtypes(include="object").columns.tolist()
     num_cols = X_train.select_dtypes(include="number").columns.tolist()
@@ -349,7 +346,7 @@ def fit_feature_encoders(X_train: pd.DataFrame):
     return enc, scaler, cat_cols, num_cols
 
 
-def apply_feature_encoders(X: pd.DataFrame, enc, scaler, cat_cols, num_cols) -> pd.DataFrame:
+def apply_feature_encoders(X, enc, scaler, cat_cols, num_cols) :
     """Apply fitted OrdinalEncoder and StandardScaler. Returns a DataFrame."""
     X_out = X.copy()
     present_cat = [c for c in cat_cols if c in X_out.columns]
@@ -368,7 +365,7 @@ def apply_feature_encoders(X: pd.DataFrame, enc, scaler, cat_cols, num_cols) -> 
 # Main pipeline 
 
 def preprocess(
-    df: pd.DataFrame,
+    df,
     target_col= "level_MAT",
     nan_threshold = DEFAULT_NAN_THRESHOLD,
     drop_other_scores = True,
@@ -378,16 +375,14 @@ def preprocess(
     Preprocess original.csv into (X, y, sensitive).
 
     Parameters
-    ----------
+    
+    
     sensitive_cols:
         Configured protected-attribute names (post-rename). Exempted from the
-        >NaN-threshold column drop (step 8) -- without this, a protected
-        attribute can be silently dropped here before select_features()'s own
-        "always keep protected attributes" exemption ever gets a chance to
-        apply downstream.
+        >NaN-threshold column drop (step 8) 
+    
+    We: 
 
-    Steps
-    -----
     1.  Drop identifiers, availability flags, redundant cols
     2.  Drop rows with >90% NaN
         2b. Student aggregations (Repo B style)
@@ -585,8 +580,8 @@ def preprocess(
 
 
 def build_percentile_target(
-    score_train: pd.Series,
-    score_test: pd.Series,
+    score_train,
+    score_test,
     percentile = 75,
     column_name = "target_high_perf",
 ) -> tuple[pd.Series, pd.Series, float]:
@@ -606,7 +601,7 @@ def build_percentile_target(
     )
     return y_train, y_test, threshold
 
-
+#gotta love a good decorator
 @dataclass 
 class DataSplit:
     X_train: pd.DataFrame

@@ -1,13 +1,13 @@
 numpy==2.2.6
 pandas==2.2.3
 scikit-learn==1.6.1
-scipy
+scipy==1.14.1
 PyYAML==6.0.2
 matplotlib==3.9.2
 seaborn==0.13.2
 xgboost==3.2.0
 sdv==1.37.2
-imbalanced-learn
+imbalanced-learn==0.14.2
 gdown==5.2.0
 
 # Fairness mitigation (Goal 3)
