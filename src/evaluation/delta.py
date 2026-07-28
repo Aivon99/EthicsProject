@@ -5,44 +5,32 @@ from typing import Any
 import pandas as pd
 
 
+UTILITY_METRICS = ["balanced_accuracy", "f1_macro", "roc_auc", "brier_score"]
+FAIRNESS_METRICS = ["mean_dpd", "mean_eod", "mean_di", "mean_odds_ratio"]
 
-def compute_delta_matrix(
-    metrics_df: pd.DataFrame,
-    cfg: dict[str, Any],
-) -> pd.DataFrame:
-    """Add delta_<metric> columns giving each row's change from the same classifier's real baseline."""
-    baseline_label  = cfg["experiments"]["baseline_label"]
-    numeric_cols    = metrics_df.select_dtypes(include="number").columns.tolist()
-    delta_df        = metrics_df.copy()
 
-    # Lookup: classifier -> its baseline row.
-    baseline_rows = (
-        metrics_df[metrics_df["method"] == baseline_label]
-        .set_index("classifier")[numeric_cols]
-    )
+def compute_delta_matrix(metrics_df: pd.DataFrame, cfg: dict[str, Any]) -> pd.DataFrame:
+    """Add a delta column per metric, measured as synthetic minus the same classifier's real baseline.
 
-    for col in numeric_cols:
-        delta_col = f"delta_{col}"
-        delta_df[delta_col] = delta_df.apply(
-            lambda row: (
-                row[col] - baseline_rows.loc[row["classifier"], col]
-                if row["classifier"] in baseline_rows.index
-                else float("nan")
-            ),
-            axis=1,
-        )
+    A negative delta always means the synthetic source is worse on a higher-is-better metric.
+    """
+    baseline_label = cfg["experiments"]["baseline_label"]
+    delta_df = metrics_df.copy()
+
+    baseline = metrics_df[metrics_df["method"] == baseline_label].set_index("classifier")
+    metrics = [m for m in UTILITY_METRICS + FAIRNESS_METRICS if m in metrics_df.columns]
+
+    for metric in metrics:
+        reference = delta_df["classifier"].map(baseline[metric])
+        delta_df[f"delta_{metric}"] = delta_df[metric] - reference
+        delta_df.loc[delta_df["method"] == baseline_label, f"delta_{metric}"] = float("nan")
 
     return delta_df
 
 
 def get_utility_delta_columns(metrics_df: pd.DataFrame) -> list[str]:
-    """Return a list of delta column names that correspond to utility metrics."""
-    util_prefixes = ("delta_balanced_accuracy", "delta_f1_macro",
-                     "delta_roc_auc", "delta_brier_score", "delta_mmd")
-    return [c for c in metrics_df.columns if c.startswith(util_prefixes)]
+    return [f"delta_{m}" for m in UTILITY_METRICS if f"delta_{m}" in metrics_df.columns]
 
 
 def get_fairness_delta_columns(metrics_df: pd.DataFrame) -> list[str]:
-    """Return a list of delta column names that correspond to fairness metrics."""
-    fair_prefixes = ("delta_mean_dpd", "delta_mean_eod", "delta_mean_di", "delta_mean_odds_ratio")
-    return [c for c in metrics_df.columns if c.startswith(fair_prefixes)]
+    return [f"delta_{m}" for m in FAIRNESS_METRICS if f"delta_{m}" in metrics_df.columns]
