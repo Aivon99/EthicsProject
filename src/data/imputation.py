@@ -1,8 +1,73 @@
+from __future__ import annotations
+
 import numpy as np
 import pandas as pd
-from src.utils import get_logger
+
+from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def fit_imputation(X_train: pd.DataFrame, sensitive_cols: list) -> dict[str, dict]:
+    """Learn one fill value per column from the training split only, so nothing leaks from the test split.
+
+    Protected attributes get no fill value at all. They are flagged instead, because imputing a
+    circumstance would invent group membership and bias the fairness metrics that follow.
+    """
+    plan: dict[str, dict] = {}
+
+    for col in X_train.columns:
+        if X_train[col].isna().sum() == 0:
+            continue
+
+        if col in sensitive_cols:
+            plan[col] = {"strategy": "flag"}
+        elif _is_categorical(X_train[col]):
+            plan[col] = {"strategy": "unknown", "value": "UNKNOWN"}
+        elif _is_boolean(X_train[col]) or _is_ordinal_integer(X_train[col]):
+            mode = X_train[col].mode(dropna=True)
+            if len(mode):
+                plan[col] = {"strategy": "mode", "value": mode[0]}
+        else:
+            plan[col] = {"strategy": "median", "value": X_train[col].median(skipna=True)}
+
+    n_flagged = sum(1 for p in plan.values() if p["strategy"] == "flag")
+    logger.info(f"Imputation plan fitted on the training split: {len(plan) - n_flagged} columns "
+                f"filled, {n_flagged} protected attributes flagged instead")
+    return plan
+
+
+def apply_imputation(X: pd.DataFrame, plan: dict[str, dict]) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Apply a fitted plan, returning the filled frame and the missingness flags for protected attributes."""
+    filled = X.copy()
+    flags = {}
+
+    for col, spec in plan.items():
+        if col not in filled.columns:
+            continue
+        if spec["strategy"] == "flag":
+            flags[f"{col}_was_nan"] = filled[col].isna()
+        else:
+            filled[col] = filled[col].fillna(spec["value"])
+
+    return filled, pd.DataFrame(flags, index=X.index)
+
+
+def imputation_report(X_before: pd.DataFrame, X_after: pd.DataFrame, plan: dict[str, dict]) -> pd.DataFrame:
+    """Per column comparison of missingness before and after, with the strategy that was applied."""
+    before = X_before.isna().sum()
+    rows = []
+    for col, spec in plan.items():
+        rows.append(
+            {
+                "column": col,
+                "missing_before": int(before[col]),
+                "missing_rate_before": float(before[col] / len(X_before)),
+                "missing_after": int(X_after[col].isna().sum()),
+                "strategy": spec["strategy"],
+            }
+        )
+    return pd.DataFrame(rows).sort_values("missing_before", ascending=False).reset_index(drop=True)
 
 
 def _is_categorical(series: pd.Series) -> bool:
@@ -10,127 +75,13 @@ def _is_categorical(series: pd.Series) -> bool:
 
 
 def _is_boolean(series: pd.Series) -> bool:
-    non_null = series.dropna()
-    if len(non_null) == 0:
-        return False
-    return set(non_null.unique()).issubset({True, False, 0, 1})
+    values = series.dropna().unique()
+    return len(values) > 0 and set(values).issubset({True, False, 0, 1})
 
 
-def _is_ordinal_integer(series: pd.Series):
+def _is_ordinal_integer(series: pd.Series) -> bool:
+    """Likert style: a small number of distinct values on a short integer scale."""
     if series.dtype not in [np.int64, np.float64, "Int64"]:
         return False
-    n_unique = series.nunique(dropna=True)
-    col_min  = series.min(skipna=True)
-    col_max  = series.max(skipna=True)
-    # Likert-like: small range, small number of unique values
-    return n_unique <= 10 and col_max <= 10
+    return series.nunique(dropna=True) <= 10 and series.max(skipna=True) <= 10
 
-
-def impute(
-    X: pd.DataFrame,
-    sensitive_cols: list[str],
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """
-    Impute missing values in X.
-
-    - Sensitive cols      : never imputed; a boolean missingness flag col is added instead
-    - Categorical (object): NaN → "UNKNOWN"
-    - Boolean             : NaN → mode
-    - Ordinal integer     : NaN → mode  (Likert scales, small-range integers)
-    - Continuous float    : NaN → median
-    
-    """
-    df = X.copy()
-    flag_cols = {}
-
-    n_cols     = df.shape[1]
-    n_imputed  = 0
-    n_flagged  = 0
-
-    for col in df.columns:
-        n_nan = df[col].isna().sum()
-        if n_nan == 0:
-            continue
-
-        #  Sensitive: flag only, never impute 
-        if col in sensitive_cols:
-            flag_cols[f"{col}_was_nan"] = df[col].isna()
-            n_flagged += 1
-            logger.info(f"  [FLAG]    {col:<45} {n_nan} NaNs ({n_nan/len(df):.1%})")
-            continue
-
-        #  Categorical
-        if _is_categorical(df[col]):
-            df[col] = df[col].fillna("UNKNOWN")
-            n_imputed += 1
-            logger.info(f"  [CAT]     {col:<45} {n_nan} NaNs → 'UNKNOWN'")
-            continue
-
-        #  Boolean
-        if _is_boolean(df[col]):
-            mode_val = df[col].mode(dropna=True)
-            if len(mode_val) > 0:
-                df[col] = df[col].fillna(mode_val[0])
-                n_imputed += 1
-                logger.info(f"  [BOOL]    {col:<45} {n_nan} NaNs → mode={mode_val[0]}")
-            continue
-
-        # Ordinal integer
-        if _is_ordinal_integer(df[col]):
-            mode_val = df[col].mode(dropna=True)
-            if len(mode_val) > 0:
-                df[col] = df[col].fillna(mode_val[0])
-                n_imputed += 1
-                logger.info(f"  [ORD]     {col:<45} {n_nan} NaNs → mode={mode_val[0]:.0f}")
-            continue
-
-        #  Continuous 
-        median_val = df[col].median(skipna=True)
-        df[col] = df[col].fillna(median_val)
-        n_imputed += 1
-        logger.info(f"  [CONT]    {col:<45} {n_nan} NaNs → median={median_val:.3f}")
-
-    flag_df = pd.DataFrame(flag_cols, index=df.index)
-
-    logger.info(
-        f"\nImputation done: {n_imputed}/{n_cols} cols imputed, "
-        f"{n_flagged} sensitive cols flagged (not imputed)"
-    )
-    remaining = df.isna().sum().sum()
-    if remaining > 0:
-        logger.warning(f"  {remaining} NaNs still remain (in sensitive cols — expected)")
-
-    return df, flag_df
-
-
-def imputation_report(
-    X_before,
-    X_after,
-    flag_df,
-    sensitive_cols,
-) :
-    """
-    Returns a summary dataframe comparing NaN counts before and after imputation.
-    """
-    before = X_before.isna().sum().rename("nan_before")
-    after  = X_after.isna().sum().rename("nan_after")
-    report = pd.concat([before, after], axis=1)
-    report["nan_fraction_before"] = before / len(X_before)
-    report["nan_fraction_after"]  = after  / len(X_after)
-    report["strategy"] = "none"
-
-    for col in report.index:
-        if col in sensitive_cols:
-            report.loc[col, "strategy"] = "flagged"
-        elif before[col] == 0:
-            report.loc[col, "strategy"] = "no_nan"
-        elif _is_categorical(X_before[col]):
-            report.loc[col, "strategy"] = "cat→UNKNOWN"
-        elif _is_boolean(X_before[col]):
-            report.loc[col, "strategy"] = "bool→mode"
-        elif _is_ordinal_integer(X_before[col]):
-            report.loc[col, "strategy"] = "ord→mode"
-        else:
-            report.loc[col, "strategy"] = "cont→median"
-
-    return report.query("nan_before > 0").sort_values("nan_before", ascending=False)

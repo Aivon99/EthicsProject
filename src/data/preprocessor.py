@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-import pickle
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
-import pandas as pd
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder, OrdinalEncoder, StandardScaler
-from src.utils import get_logger, load_config
+
 import numpy as np
+import pandas as pd
+from sklearn.preprocessing import OrdinalEncoder, StandardScaler
+
+from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -38,13 +37,13 @@ REDUNDANT_COLS = [
     "single_parent_household",
     # books duplicates f11 (extent_of_books_at_home)
     "books",
-    # raw education codes – recoded versions (f3a, f3b) kept
+    # raw education codes, the recoded versions (f3a, f3b) kept
     "mother_education", "father_education",
     # admin grouping metadata
     "p_group_criteria_alphabet", "p_group_criteria_gender",
     "p_group_criteria_language", "p_group_criteria_performance",
     "p_group_criteria_homogeneity", "p_group_criteria_heterogeneity",
-    # survey weight – not meaningful for generation
+    # survey weight, not meaningful for generation
     "weight",
     # misc columns only present in some years (MAR)
     "f8ta", "f8tm",   # age at start of schooling raw fields
@@ -234,8 +233,6 @@ RECODE_MAP = {
     },
 }
 
-ESCS_BINS   = [-np.inf, -2, -1, 0, 1, 2, np.inf]
-ESCS_LABELS = ["VERY_LOW", "LOW", "BELOW_AVG", "ABOVE_AVG", "HIGH", "VERY_HIGH"]
 
 DEFAULT_NAN_THRESHOLD = 0.5
 
@@ -326,10 +323,6 @@ def nan_summary(df):
     )
 
 
-def bin_escs(series):
-    return pd.cut(series, bins=ESCS_BINS, labels=ESCS_LABELS)
-
-
 def fit_feature_encoders(X_train):
     """Fit OrdinalEncoder on categorical cols, StandardScaler on numerical."""
     cat_cols = X_train.select_dtypes(include="object").columns.tolist()
@@ -346,8 +339,14 @@ def fit_feature_encoders(X_train):
     return enc, scaler, cat_cols, num_cols
 
 
-def apply_feature_encoders(X, enc, scaler, cat_cols, num_cols) :
-    """Apply fitted OrdinalEncoder and StandardScaler. Returns a DataFrame."""
+def apply_feature_encoders(X, enc, scaler, cat_cols, num_cols) -> pd.DataFrame:
+    """Apply the fitted encoder and scaler, then fill what is left so the classifiers can run.
+
+    Protected attributes are deliberately never imputed in G1, so they still carry missing
+    values here. Logistic regression and the MLP cannot accept them, so the remaining gaps are
+    filled with zero, which after scaling is the training mean. The same fill is applied to
+    every data source, real and synthetic, so it cannot favour one of them.
+    """
     X_out = X.copy()
     present_cat = [c for c in cat_cols if c in X_out.columns]
     present_num = [c for c in num_cols if c in X_out.columns]
@@ -357,19 +356,17 @@ def apply_feature_encoders(X, enc, scaler, cat_cols, num_cols) :
     if present_num:
         X_out[present_num] = scaler.transform(X_out[present_num])
 
-    # Fill any remaining NaNs (sensitive cols not imputed in Goal 1) with 0
-    X_out = X_out.fillna(0.0)
-    return X_out.astype(float)
+    return X_out.fillna(0.0).astype(float)
 
 
 # Main pipeline 
 
 def preprocess(
     df,
-    target_col= "level_MAT",
-    nan_threshold = DEFAULT_NAN_THRESHOLD,
-    drop_other_scores = True,
-    sensitive_cols = None,
+    target_col="level_MAT",
+    nan_threshold=DEFAULT_NAN_THRESHOLD,
+    drop_other_scores=True,
+    sensitive_cols=None,
 ) -> tuple[pd.DataFrame, pd.Series, pd.Series]:
     """
     Preprocess original.csv into (X, y, sensitive).
@@ -579,30 +576,35 @@ def preprocess(
     return df, y, sensitive
 
 
-def build_percentile_target(
-    score_train,
-    score_test,
-    percentile = 75,
-    column_name = "target_high_perf",
-) -> tuple[pd.Series, pd.Series, float]:
+def build_percentile_target(score_train, score_test, task: dict) -> tuple[pd.Series, pd.Series, float]:
+    """Threshold a continuous score into a binary target, using the training split to set the cut point.
+
+    task comes from the tasks block of config.yaml and carries the percentile, the tail and the
+    column name, so the same function builds both the excellence and the underperformance label.
     """
-    Construct the binary "excellence" target by thresholding a continuous
-    performance score.
-    """
+    percentile = task["percentile"]
+    column_name = task["column"]
     threshold = float(np.percentile(score_train.dropna(), percentile))
-    y_train = (score_train >= threshold).astype(int).rename(column_name)
-    y_test  = (score_test  >= threshold).astype(int).rename(column_name)
+
+    if task["tail"] == "upper":
+        y_train = (score_train >= threshold).astype(int)
+        y_test = (score_test >= threshold).astype(int)
+    else:
+        y_train = (score_train <= threshold).astype(int)
+        y_test = (score_test <= threshold).astype(int)
+
+    y_train = y_train.rename(column_name)
+    y_test = y_test.rename(column_name)
 
     logger.info(
-        f"Binary target '{column_name}': threshold={threshold:.3f} "
-        f"(p{percentile} of train split only), "
-        f"train positive rate={y_train.mean():.1%}, "
-        f"test positive rate={y_test.mean():.1%}"
+        f"Target '{column_name}': {task['tail']} tail at p{percentile}, threshold={threshold:.3f} "
+        f"from the training split only, positive rate train={y_train.mean():.1%} "
+        f"test={y_test.mean():.1%}"
     )
     return y_train, y_test, threshold
 
-#gotta love a good decorator
-@dataclass 
+
+@dataclass
 class DataSplit:
     X_train: pd.DataFrame
     X_test: pd.DataFrame
@@ -615,12 +617,3 @@ class DataSplit:
     protected_attrs: list[str] = field(default_factory=list)
     encoders: dict[str, Any] = field(default_factory=dict)
     scaler: Any = None
-
-
-def save_split(split, path):
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "wb") as f:
-        pickle.dump(split, f)
-    logger.info(f"DataSplit saved to {path}.")
-    return split
