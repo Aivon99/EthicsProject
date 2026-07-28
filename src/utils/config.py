@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-import os
-import yaml
+import copy
 from pathlib import Path
 from typing import Any
 
+import yaml
 
 
-def load_config(config_path: str | Path = "../config/config.yaml") -> dict[str, Any]:
-    """Load config.yaml and resolve every value under `paths` to an absolute Path."""
+def load_config(config_path="../config/config.yaml") -> dict:
+    """Load config file."""
     resolved_config_path = Path(config_path).resolve()
     project_root = resolved_config_path.parent.parent
 
@@ -17,37 +17,47 @@ def load_config(config_path: str | Path = "../config/config.yaml") -> dict[str, 
 
     cfg["project_root"] = project_root
     cfg["paths"] = _resolve_paths(cfg.get("paths", {}), project_root)
-
     return cfg
 
 
-def get_synthetic_output_path(cfg: dict, method: str) -> Path:
-    """Return the output CSV path for a given generation method, creating its directory."""
-    subdirs = cfg["generation"]["output_subdirs"]
-    filename_template = cfg["generation"]["output_filename_template"]
+def select_task(cfg: dict, task: str) -> dict:
+    """Return a copy of cfg bound to one task: either 'target_high_perf' or 'target_low_perf'."""
+    if task not in cfg["tasks"]:
+        raise ValueError(f"Unknown task '{task}'. Valid options: {list(cfg['tasks'])}")
 
-    subdir = subdirs[method]
-    filename = filename_template.format(method=subdir)
+    task_cfg = copy.deepcopy(cfg)
+    task_cfg["task"] = task
+    task_cfg["dataset"]["target_column"] = cfg["tasks"][task]["column"]
+    task_cfg["generation"]["datasets"] = cfg["generation"]["datasets_per_task"][task]
+    return task_cfg
+
+
+def get_synthetic_output_path(cfg: dict, method: str) -> Path:
+    """Return the output CSV path for a given generation method."""
+    subdir = cfg["generation"]["output_subdirs"][method]
+    filename = cfg["generation"]["output_filename_template"].format(method=subdir)
 
     output_path = cfg["paths"]["synthetic_dir"] / subdir / filename
     output_path.parent.mkdir(parents=True, exist_ok=True)
     return output_path
 
 
+def notebook_dirs(cfg: dict, notebook: str) -> tuple[Path, Path]:
+    """Return and create the results and figures directories belonging to one notebook."""
+    results_dir = cfg["paths"]["results_dir"] / notebook
+    figures_dir = cfg["paths"]["figures_dir"] / notebook
+    results_dir.mkdir(parents=True, exist_ok=True)
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    return results_dir, figures_dir
+
+
 def _resolve_paths(paths_section: dict, project_root: Path) -> dict:
-    """Recursively resolve string path values to absolute Path objects."""
     resolved: dict[str, Any] = {}
     for key, value in paths_section.items():
-        if isinstance(value, str):
-            if value == "":
-                # Empty string means "unset" (e.g. blank raw_data_url); keep it
-                # as-is so it stays falsy rather than resolving to project_root.
-                resolved[key] = value
-            else:
-                p = Path(value)
-                resolved[key] = p if p.is_absolute() else (project_root / p).resolve()
-        elif isinstance(value, dict):
-            resolved[key] = _resolve_paths(value, project_root)
-        else:
+        # A URL is not a path and must survive untouched.
+        if key.endswith("_url") or not isinstance(value, str) or not value:
             resolved[key] = value
+        else:
+            path = Path(value)
+            resolved[key] = path if path.is_absolute() else (project_root / path).resolve()
     return resolved

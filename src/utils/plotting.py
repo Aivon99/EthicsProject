@@ -5,495 +5,319 @@ from typing import Any
 
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
-
 import numpy as np
 import pandas as pd
 import seaborn as sns
 
 from src.utils.logging import get_logger
+from src.generation.metadata import categorical_columns
 
 logger = get_logger(__name__)
 
-# Set common style for plots
-STYLE = "seaborn-v0_8-whitegrid"
-plt.style.use(STYLE)
+plt.style.use("seaborn-v0_8-whitegrid")
 plt.rcParams.update({
-    "savefig.dpi":       200,
-    "font.size":         15,
-    "axes.titlesize":    17,
-    "axes.titleweight":  "bold",
-    "axes.labelsize":    16,
-    "xtick.labelsize":   14,
-    "ytick.labelsize":   14,
-    "legend.fontsize":   13,
-    "legend.title_fontsize": 13,
-    "figure.titlesize":  18,
+    "savefig.dpi": 200,
+    "figure.dpi": 110,
+    "font.size": 12,
+    "axes.titlesize": 14,
+    "axes.titleweight": "bold",
+    "axes.labelsize": 12,
+    "xtick.labelsize": 11,
+    "ytick.labelsize": 11,
+    "legend.fontsize": 11,
+    "legend.title_fontsize": 11,
+    "figure.titlesize": 15,
 })
 
 METHOD_COLORS = {
-    "real":             "#2c3e50",
-    "ctgan":            "#e74c3c",
-    "tvae":             "#3498db",
-    "gaussian_copula":  "#2ecc71",
-    "smote":            "#f39c12",
+    "real": "#2c3e50",
+    "ctgan": "#e74c3c",
+    "tvae": "#3498db",
+    "gaussian_copula": "#2ecc71",
+    "smote": "#f39c12",
+    "smote_low_perf": "#f39c12",
 }
 
+GREY = "#95a5a6"
 
 
-def plot_marginal_distributions(
-    real_df: pd.DataFrame,
-    synthetic_dfs: dict[str, pd.DataFrame],
-    col: str,
-    cfg: dict[str, Any],
-    save: bool = True,
-) -> plt.Figure:
-    """Distribution of one column, real vs each synthetic dataset."""
-    cat_cols = set(cfg["dataset"].get("categorical_columns", []))
-    is_cat   = col in cat_cols or real_df[col].dtype == object
+def method_order(df: pd.DataFrame, cfg: dict) -> list[str]:
+    """Methods actually present in a results frame, baseline first."""
+    baseline = cfg["experiments"]["baseline_label"]
+    present = list(dict.fromkeys(df["method"]))
+    return [m for m in present if m == baseline] + [m for m in present if m != baseline]
 
+
+def save_figure(fig: plt.Figure, name: str, figures_dir) -> Path:
+    figures_dir = Path(figures_dir)
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    out_path = figures_dir / f"{name}.png"
+    fig.savefig(out_path, bbox_inches="tight")
+    logger.info(f"Figure saved to {out_path}")
+    return out_path
+
+
+def plot_class_balance(real_df, synthetic_dfs: dict, target: str, figures_dir, title_suffix: str = ""):
+    """Positive and negative rate of one target across the real data and every synthetic dataset."""
     all_dfs = {"real": real_df} | synthetic_dfs
-    n_methods = len(all_dfs)
-    fig, axes = plt.subplots(1, n_methods, figsize=(3.2 * n_methods, 3.6), sharey=False)
-    if n_methods == 1:
-        axes = [axes]
+    methods = list(all_dfs)
+    classes = sorted(real_df[target].unique())
 
-    for ax, (method, df) in zip(axes, all_dfs.items()):
-        color = METHOD_COLORS.get(method, "grey")
-        series = df[col].dropna()
-
-        if is_cat:
-            vc = series.value_counts(normalize=True).head(10)
-            ax.bar(range(len(vc)), vc.values, color=color, alpha=0.85)
-            ax.set_xticks(range(len(vc)))
-            ax.set_xticklabels(vc.index, rotation=45, ha="right", fontsize=12)
-            ax.set_ylabel("Relative frequency")
-        else:
-            ax.hist(series, bins=30, color=color, alpha=0.75, density=True, edgecolor="white")
-            ax.set_ylabel("Density")
-
-        ax.set_title(method, fontsize=15)
-        ax.set_xlabel(col)
-
-    fig.suptitle(f"Marginal distribution: {col}", y=1.02)
-    plt.tight_layout()
-
-    if save:
-        _save_fig(fig, f"marginal_{col}", cfg)
-
-    return fig
-
-
-def plot_fidelity_summary(
-    reports: list[dict[str, Any]],
-    cfg: dict[str, Any],
-    save: bool = True,
-) -> plt.Figure:
-    """MMD and correlation MAE per method, side by side."""
-    methods      = [r["method"] for r in reports]
-    mmd_values   = [r["mmd"] for r in reports]
-    corr_values  = [r["correlation_mae"] for r in reports]
-    colors       = [METHOD_COLORS.get(m, "grey") for m in methods]
-
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9, 4.2))
-
-    _bar_chart(ax1, methods, mmd_values, colors, "MMD (RBF)", "lower is better")
-    _bar_chart(ax2, methods, corr_values, colors, "Correlation MAE", "lower is better")
-
-    fig.suptitle("Fidelity: real vs synthetic")
-    plt.tight_layout()
-
-    if save:
-        _save_fig(fig, "fidelity_summary", cfg)
-
-    return fig
-
-
-def plot_class_balance(
-    real_df: pd.DataFrame,
-    synthetic_dfs: dict[str, pd.DataFrame],
-    cfg: dict[str, Any],
-    save: bool = True,
-) -> plt.Figure:
-    """Target class distribution, real vs synthetic."""
-    target = cfg["dataset"]["target_column"]
-    all_dfs = {"real": real_df} | synthetic_dfs
-
-    methods = list(all_dfs.keys())
-    class_labels = sorted(real_df[target].unique())
     x = np.arange(len(methods))
     width = 0.35
 
-    fig, ax = plt.subplots(figsize=(8, 4.8))
-
-    for i, cls in enumerate(class_labels):
-        freqs = [
-            all_dfs[m][target].value_counts(normalize=True).get(cls, 0)
-            for m in methods
-        ]
-        offset = (i - 0.5) * width
-        bars = ax.bar(x + offset, freqs, width, label=f"Class {cls}", alpha=0.85)
+    fig, ax = plt.subplots(figsize=(1.6 * len(methods) + 3, 4.6))
+    for i, cls in enumerate(classes):
+        freqs = [all_dfs[m][target].value_counts(normalize=True).get(cls, 0.0) for m in methods]
+        bars = ax.bar(x + (i - 0.5) * width, freqs, width, label=f"class {cls}", alpha=0.9)
         for bar, freq in zip(bars, freqs):
-            ax.text(
-                bar.get_x() + bar.get_width() / 2,
-                bar.get_height() + 0.01,
-                f"{freq:.0%}",
-                ha="center", va="bottom", fontsize=12,
-            )
+            ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.012,
+                    f"{freq:.0%}", ha="center", va="bottom", fontsize=10)
 
     ax.set_xticks(x)
-    ax.set_xticklabels(methods, rotation=15, ha="right")
+    ax.set_xticklabels(methods, rotation=20, ha="right")
     ax.set_ylabel("Relative frequency")
-    ax.set_title(f"Target class balance: '{target}'", fontweight="bold")
-    ax.legend(title="Class")
+    ax.set_ylim(0, 1.08)
+    ax.set_title(f"Class balance of {target}{title_suffix}")
     ax.yaxis.set_major_formatter(mticker.PercentFormatter(xmax=1))
-    plt.tight_layout()
+    ax.legend(title="Class", bbox_to_anchor=(1.02, 1), loc="upper left", borderaxespad=0)
+    fig.tight_layout()
 
-    if save:
-        _save_fig(fig, "class_balance", cfg)
-
+    save_figure(fig, f"class_balance_{target}", figures_dir)
     return fig
 
 
-def plot_correlation_heatmap(
-    df: pd.DataFrame,
-    title: str,
-    cfg: dict[str, Any],
-    save: bool = True,
-    filename_suffix: str = "",
-) -> plt.Figure:
-    """Spearman correlation matrix of the numerical columns as a heatmap."""
-    num_df = df.select_dtypes(include="number")
-    corr   = num_df.corr(method="spearman")
-    n      = len(corr)
+def plot_marginal_distributions(real_df, synthetic_dfs: dict, col: str, cfg, figures_dir):
+    """Distribution of one column in the real data and in each synthetic dataset."""
 
-    fig, ax = plt.subplots(figsize=(max(6, n * 0.6), max(5, n * 0.55)))
-    im = ax.imshow(corr.values, vmin=-1, vmax=1, cmap="RdBu_r", aspect="auto")
-    plt.colorbar(im, ax=ax, shrink=0.8, label="Spearman correlation")
+    is_categorical = col in set(categorical_columns(real_df, cfg))
 
-    ax.set_xticks(range(n))
-    ax.set_yticks(range(n))
-    ax.set_xticklabels(corr.columns, rotation=90, fontsize=11)
-    ax.set_yticklabels(corr.columns, fontsize=11)
-    ax.set_title(title, fontweight="bold", pad=12)
+    all_dfs = {"real": real_df} | synthetic_dfs
+    n_cols = min(3, len(all_dfs))
+    n_rows = int(np.ceil(len(all_dfs) / n_cols))
 
-    plt.tight_layout()
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4.2 * n_cols, 3.2 * n_rows), sharey=True)
+    flat = np.atleast_1d(axes).ravel()
 
-    if save:
-        _save_fig(fig, f"correlation_heatmap{filename_suffix}", cfg)
+    for ax, (method, df) in zip(flat, all_dfs.items()):
+        series = df[col].dropna()
+        if is_categorical:
+            freq = series.value_counts(normalize=True).sort_index().head(10)
+            ax.bar(range(len(freq)), freq.values, color=METHOD_COLORS.get(method, GREY), alpha=0.9)
+            ax.set_xticks(range(len(freq)))
+            ax.set_xticklabels(freq.index, rotation=45, ha="right", fontsize=10)
+        else:
+            ax.hist(series, bins=30, color=METHOD_COLORS.get(method, GREY), alpha=0.85, density=True)
+        ax.set_title(method, fontsize=12)
 
+    for ax in flat[len(all_dfs):]:
+        ax.set_visible(False)
+    for ax in flat[::n_cols]:
+        ax.set_ylabel("Relative frequency" if is_categorical else "Density")
+
+    fig.suptitle(f"Marginal distribution of {col}")
+    fig.tight_layout()
+
+    save_figure(fig, f"marginal_{col}", figures_dir)
     return fig
 
 
-def plot_utility_bar(
-    metrics_df: pd.DataFrame,
-    metric: str,
-    cfg: dict[str, Any],
-    save: bool = True,
-) -> plt.Figure:
-    """Grouped bars of one utility metric, per classifier and method."""
-    colors      = METHOD_COLORS
-    classifiers = metrics_df["classifier"].unique().tolist()
-    methods     = [cfg["experiments"]["baseline_label"]] + list(cfg["generation"]["methods"])
-    methods     = [m for m in methods if m in metrics_df["method"].unique()]
+def plot_fidelity_summary(fidelity_df, figures_dir):
+    metrics = [("mmd", "MMD"), ("correlation_mae", "Correlation MAE"), ("mean_kl", "Mean KL divergence")]
+    fig, axes = plt.subplots(1, 3, figsize=(13, 4))
 
-    x       = np.arange(len(classifiers))
-    n_meth  = len(methods)
-    width   = 0.7 / n_meth
-    offsets = np.linspace(-(n_meth - 1) / 2, (n_meth - 1) / 2, n_meth) * width
+    for ax, (col, label) in zip(axes, metrics):
+        colours = [METHOD_COLORS.get(m, GREY) for m in fidelity_df["method"]]
+        bars = ax.bar(fidelity_df["method"], fidelity_df[col], color=colours, alpha=0.9)
+        top = fidelity_df[col].max()
+        for bar, value in zip(bars, fidelity_df[col]):
+            ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + top * 0.02,
+                    f"{value:.4f}", ha="center", va="bottom", fontsize=10)
+        ax.set_ylabel(label)
+        ax.set_ylim(0, top * 1.18)
+        ax.set_title(label, fontsize=12)
+        ax.tick_params(axis="x", rotation=25)
+        for tick in ax.get_xticklabels():
+            tick.set_ha("right")
 
-    fig, ax = plt.subplots(figsize=(8.5, 5))
+    fig.suptitle("Fidelity of each synthetic dataset against the real training data")
+    fig.tight_layout()
 
+    save_figure(fig, "fidelity_summary", figures_dir)
+    return fig
+
+
+def plot_metric_by_method(metrics_df: pd.DataFrame, metric: str, cfg, figures_dir, title: str = "",
+                          reference_line: float | None = None, reference_label: str = ""):
+    methods = method_order(metrics_df, cfg)
+    classifiers = list(dict.fromkeys(metrics_df["classifier"]))
+
+    x = np.arange(len(classifiers))
+    width = 0.8 / len(methods)
+    offsets = np.linspace(-(len(methods) - 1) / 2, (len(methods) - 1) / 2, len(methods)) * width
+
+    fig, ax = plt.subplots(figsize=(2.4 * len(classifiers) + 4, 4.8))
     for i, method in enumerate(methods):
-        sub    = metrics_df[metrics_df["method"] == method].set_index("classifier")
-        values = [sub.loc[c, metric] if c in sub.index else float("nan") for c in classifiers]
-        bars   = ax.bar(
-            x + offsets[i], values, width,
-            label=method,
-            color=colors.get(method, "grey"),
-            alpha=0.85,
-            edgecolor="white",
-        )
-        for bar, v in zip(bars, values):
-            if not np.isnan(v):
-                ax.text(
-                    bar.get_x() + bar.get_width() / 2,
-                    bar.get_height() + 0.003,
-                    f"{v:.3f}",
-                    ha="center", va="bottom", fontsize=11, rotation=90,
-                )
+        sub = metrics_df[metrics_df["method"] == method].set_index("classifier")
+        values = np.array([sub[metric].get(c, np.nan) for c in classifiers], dtype=float)
+        ax.bar(x + offsets[i], values, width, label=method,
+               color=METHOD_COLORS.get(method, GREY), alpha=0.9, edgecolor="white")
+        for position, value in zip(x + offsets[i], values):
+            if np.isnan(value):
+                ax.text(position, 0, " undefined", rotation=90, ha="center", va="bottom",
+                        fontsize=9, color=GREY)
+
+    if reference_line is not None:
+        ax.axhline(reference_line, color="grey", ls=":", lw=1.2, label=reference_label)
 
     ax.set_xticks(x)
-    ax.set_xticklabels(classifiers, rotation=15, ha="right")
-    ax.set_ylabel(metric.replace("_", " ").title())
-    ax.set_title(f"{metric.replace('_', ' ').title()}: TSTR vs real baseline", fontweight="bold")
-    ax.legend(title="Training data", bbox_to_anchor=(1.01, 1), loc="upper left", fontsize=13)
-    plt.tight_layout()
+    ax.set_xticklabels([c.replace("_", " ") for c in classifiers])
+    ax.set_ylabel(metric.replace("_", " "))
+    ax.set_title(title or f"{metric.replace('_', ' ')} by training set")
+    ax.legend(title="Trained on", bbox_to_anchor=(1.02, 1), loc="upper left", borderaxespad=0)
+    fig.tight_layout()
 
-    if save:
-        _save_fig(fig, f"utility_{metric}", cfg)
-
+    save_figure(fig, f"{metric}", figures_dir)
     return fig
 
 
-def plot_fairness_bar(
-    metrics_df: pd.DataFrame,
-    metric: str,
-    cfg: dict[str, Any],
-    save: bool = True,
-) -> plt.Figure:
-    """Grouped bars of one mean-fairness metric, per classifier and method."""
-    colors      = METHOD_COLORS
-    classifiers = metrics_df["classifier"].unique().tolist()
-    methods     = [cfg["experiments"]["baseline_label"]] + list(cfg["generation"]["methods"])
-    methods     = [m for m in methods if m in metrics_df["method"].unique()]
 
-    x       = np.arange(len(classifiers))
-    n_meth  = len(methods)
-    width   = 0.7 / n_meth
-    offsets = np.linspace(-(n_meth - 1) / 2, (n_meth - 1) / 2, n_meth) * width
 
-    fig, ax = plt.subplots(figsize=(8.5, 5))
+LOWER_IS_BETTER = {"brier_score", "mean_dpd", "mean_eod"}
+HIGHER_IS_BETTER = {"balanced_accuracy", "f1_macro", "roc_auc", "mean_di"}
 
-    for i, method in enumerate(methods):
-        sub    = metrics_df[metrics_df["method"] == method].set_index("classifier")
-        values = [sub.loc[c, metric] if c in sub.index else float("nan") for c in classifiers]
-        bars   = ax.bar(
-            x + offsets[i], values, width,
-            label=method,
-            color=colors.get(method, "grey"),
-            alpha=0.85,
-            edgecolor="white",
-        )
-        for bar, v in zip(bars, values):
-            if not np.isnan(v):
-                ax.text(
-                    bar.get_x() + bar.get_width() / 2,
-                    bar.get_height() + 0.003,
-                    f"{v:.3f}",
-                    ha="center", va="bottom", fontsize=11, rotation=90,
-                )
 
-    ax.set_xticks(x)
-    ax.set_xticklabels(classifiers, rotation=15, ha="right")
-    ax.set_ylabel(metric.replace("_", " ").title())
-    ax.set_title(f"{metric.replace('_', ' ').title()}: TSTR vs real baseline", fontweight="bold")
-    ax.legend(title="Training data", bbox_to_anchor=(1.01, 1), loc="upper left", fontsize=13)
-    plt.tight_layout()
+def plot_delta_heatmap(delta_df: pd.DataFrame, delta_columns: list, name: str, cfg, figures_dir, title: str = ""):
+    """Change from the real baseline per training set and classifier."""
 
-    if save:
-        _save_fig(fig, f"fairness_{metric}", cfg)
+    baseline = cfg["experiments"]["baseline_label"]
+    plot_df = delta_df[delta_df["method"] != baseline].copy()
+    plot_df["row"] = plot_df["method"] + " / " + plot_df["classifier"].str.replace("_", " ")
+    pivot = plot_df.set_index("row")[delta_columns]
 
+    labels = []
+    for column in delta_columns:
+        metric = column.replace("delta_", "")
+        if metric in LOWER_IS_BETTER:
+            direction = "lower better"
+        elif metric in HIGHER_IS_BETTER:
+            direction = "higher better"
+        else:
+            direction = "1 is parity"
+        labels.append(f"{metric.replace('_', ' ')}\n({direction})")
+    limit = pivot.abs().to_numpy().max()
+    limit = limit if limit > 0 else 1.0
+
+    fig, ax = plt.subplots(figsize=(1.5 * len(delta_columns) + 4, 0.45 * len(pivot) + 2))
+    sns.heatmap(pivot, ax=ax, cmap="RdBu_r", center=0, vmin=-limit, vmax=limit,
+                annot=True, fmt=".3f", annot_kws={"size": 10}, linewidths=0.4,
+                linecolor="white", xticklabels=labels, cbar_kws={"shrink": 0.7})
+    ax.set_ylabel("")
+    ax.set_title(title or "Change from the real baseline")
+    ax.tick_params(axis="x", rotation=25)
+    ax.tick_params(axis="y", rotation=0)
+    fig.tight_layout()
+
+    save_figure(fig, f"delta_heatmap_{name}", figures_dir)
     return fig
 
 
-def plot_delta_heatmap(
-    delta_df: pd.DataFrame,
-    delta_columns: list[str],
-    filename_suffix: str,
-    cfg: dict[str, Any],
-    title: str = "Δ metrics (synthetic vs. real baseline)",
-    save: bool = True,
-) -> plt.Figure:
-    """Heatmap of metric changes from the real baseline (red = worse, blue = better)."""
-    baseline_label = cfg["experiments"]["baseline_label"]
-    plot_df = delta_df[delta_df["method"] != baseline_label].copy()
+def plot_utility_fairness_scatter(delta_df, utility_col: str, fairness_col: str, cfg, figures_dir):
+    """Utility change against fairness change, colour by training set and marker by classifier."""
+    baseline = cfg["experiments"]["baseline_label"]
+    plot_df = delta_df[delta_df["method"] != baseline]
+    classifiers = list(dict.fromkeys(plot_df["classifier"]))
+    markers = ["o", "s", "^", "D", "v"]
 
-    plot_df["row_label"] = plot_df["method"].str.upper() + " / " + plot_df["classifier"]
-    pivot = plot_df.set_index("row_label")[delta_columns]
+    fig, ax = plt.subplots(figsize=(7.5, 5.4))
+    for _, row in plot_df.iterrows():
+        ax.scatter(row[utility_col], row[fairness_col],
+                   color=METHOD_COLORS.get(row["method"], GREY),
+                   marker=markers[classifiers.index(row["classifier"]) % len(markers)],
+                   s=130, edgecolors="black", linewidths=0.4, zorder=3)
 
-    col_labels = [c.replace("delta_", "Δ ").replace("_", " ") for c in delta_columns]
-    figsize    = (max(7, len(delta_columns) * 1.4), max(4, len(pivot) * 0.5 + 1))
+    ax.axhline(0, color="grey", lw=0.8, ls="--")
+    ax.axvline(0, color="grey", lw=0.8, ls="--")
+    ax.set_xlabel(utility_col.replace("delta_", "change in ").replace("_", " "))
+    ax.set_ylabel(fairness_col.replace("delta_", "change in ").replace("_", " "))
+    ax.set_title("Utility change against fairness change")
 
-    abs_max = pivot.abs().max().max()
-    abs_max = abs_max if abs_max > 0 else 1.0
+    # Two compact legends instead of one entry per point.
+    method_handles = [
+        plt.Line2D([], [], marker="o", linestyle="", markersize=9, color=METHOD_COLORS.get(m, GREY), label=m)
+        for m in method_order(plot_df, cfg)
+    ]
+    clf_handles = [
+        plt.Line2D([], [], marker=markers[i % len(markers)], linestyle="", markersize=9,
+                   color="black", label=c.replace("_", " "))
+        for i, c in enumerate(classifiers)
+    ]
+    first = ax.legend(handles=method_handles, title="Trained on",
+                      bbox_to_anchor=(1.02, 1), loc="upper left", borderaxespad=0)
+    ax.add_artist(first)
+    ax.legend(handles=clf_handles, title="Classifier",
+              bbox_to_anchor=(1.02, 0.45), loc="upper left", borderaxespad=0)
+    fig.tight_layout()
 
-    fig, ax = plt.subplots(figsize=figsize)
-    sns.heatmap(
-        pivot,
-        ax=ax,
-        cmap="RdBu_r",
-        center=0,
-        vmin=-abs_max,
-        vmax=abs_max,
-        annot=True,
-        fmt=".3f",
-        annot_kws={"size": 12},
-        linewidths=0.4,
-        linecolor="white",
-        xticklabels=col_labels,
-        cbar_kws={"shrink": 0.7, "label": "Δ"},
-    )
-    ax.set_title(title, fontweight="bold", pad=10)
-    ax.tick_params(axis="x", rotation=30, labelsize=13)
-    ax.tick_params(axis="y", rotation=0,  labelsize=13)
-    plt.tight_layout()
-
-    if save:
-        _save_fig(fig, f"delta_heatmap_{filename_suffix}", cfg)
-
+    save_figure(fig, "scatter_utility_vs_fairness", figures_dir)
     return fig
 
 
-def plot_utility_fairness_scatter(
-    delta_df: pd.DataFrame,
-    utility_col: str,
-    fairness_col: str,
-    cfg: dict[str, Any],
-    save: bool = True,
-) -> plt.Figure:
-    """Scatter of utility change vs fairness change, one point per (method, classifier)."""
-    colors         = METHOD_COLORS
-    baseline_label = cfg["experiments"]["baseline_label"]
-    plot_df        = delta_df[delta_df["method"] != baseline_label].copy()
-    classifiers    = plot_df["classifier"].unique()
-
-    markers     = ["o", "s", "^", "D", "v"]
-    clf_markers = {c: markers[i % len(markers)] for i, c in enumerate(classifiers)}
-
-    fig, ax = plt.subplots(figsize=(7.5, 5.8))
-
-    for method in cfg["generation"]["methods"]:
-        sub = plot_df[plot_df["method"] == method]
-        for clf in classifiers:
-            row = sub[sub["classifier"] == clf]
-            if row.empty:
-                continue
-            ax.scatter(
-                row[utility_col].values,
-                row[fairness_col].values,
-                color=colors.get(method, "grey"),
-                marker=clf_markers[clf],
-                s=130,
-                label=f"{method} / {clf}",
-                edgecolors="black",
-                linewidths=0.4,
-                zorder=3,
-            )
-
-    ax.axhline(0, color="gray", lw=0.8, ls="--", alpha=0.7)
-    ax.axvline(0, color="gray", lw=0.8, ls="--", alpha=0.7)
-    ax.set_xlabel(utility_col.replace("delta_", "Δ ").replace("_", " ").title())
-    ax.set_ylabel(fairness_col.replace("delta_", "Δ ").replace("_", " ").title())
-    ax.set_title("Utility loss vs. Fairness change (relative to real baseline)", fontweight="bold")
-    ax.legend(bbox_to_anchor=(1.01, 1), loc="upper left", fontsize=12)
-    plt.tight_layout()
-
-    if save:
-        _save_fig(fig, "scatter_utility_vs_fairness", cfg)
-
-    return fig
-
-
-def plot_per_attribute_fairness(
-    fairness_df: pd.DataFrame,
-    metric: str,
-    cfg: dict[str, Any],
-    title: str = "",
-    save: bool = True,
-    filename_suffix: str = "",
-) -> plt.Figure:
-    """Horizontal bar chart of one fairness metric per protected attribute, red when it fails the acceptable threshold (DPD/EOD > 0.1, DI < 0.8) and green otherwise."""
-    fairness_df = fairness_df.loc[:, ~fairness_df.columns.duplicated()]
+def plot_per_attribute_fairness(fairness_df: pd.DataFrame, metric: str, cfg, figures_dir,
+                                title: str = "", name_suffix: str = ""):
+    """One fairness metric per protected attribute, red when it fails its threshold."""
+    thresholds = cfg["fairness"]
     sub = fairness_df[["attribute", metric]].dropna(subset=[metric])
     sub = sub.sort_values(metric, ascending=(metric != "di"))
 
-    colors = [
-        "#e74c3c" if (metric != "di" and v > 0.1) or (metric == "di" and v < 0.8)
-        else "#2ecc71"
-        for v in sub[metric]
-    ]
-
-    fig, ax = plt.subplots(figsize=(8.5, 4.5))
-    ax.barh(sub["attribute"], sub[metric], color=colors, alpha=0.85, edgecolor="white")
-
-    # Dashed line at the metric's acceptability threshold; green side is fair.
     if metric == "di":
-        ax.axvline(0.8, color="darkorange", lw=1.2, ls="--", label="4/5 rule: DI >= 0.8 is fair")
+        limit = thresholds["di_threshold"]
+        fails = sub[metric] < limit
+        rule = f"{limit} four fifths rule"
     else:
-        ax.axvline(0.1, color="darkorange", lw=1.2, ls="--", label=f"{metric.upper()} <= 0.1 is fair")
-    ax.legend(fontsize=13)
+        limit = thresholds[f"{metric}_threshold"]
+        fails = sub[metric] > limit
+        rule = f"{limit} concern threshold"
 
+    colours = ["#e74c3c" if f else "#2ecc71" for f in fails]
+
+    fig, ax = plt.subplots(figsize=(9, 0.42 * len(sub) + 2))
+    ax.barh(sub["attribute"], sub[metric], color=colours, alpha=0.9, edgecolor="white")
+    ax.axvline(limit, color="darkorange", lw=1.2, ls="--", label=rule)
     ax.set_xlabel(metric.upper())
-    ax.set_title(title or f"{metric.upper()} per Protected Attribute", fontweight="bold")
-    ax.tick_params(axis="y", labelsize=14)
-    plt.tight_layout()
+    ax.set_title(title or f"{metric.upper()} per protected attribute")
+    ax.legend(loc="lower right")
+    fig.tight_layout()
 
-    if save:
-        _save_fig(fig, f"per_attr_{metric}{filename_suffix}", cfg)
-
+    save_figure(fig, f"per_attr_{metric}{name_suffix}", figures_dir)
     return fig
 
 
-def plot_mmd_bar(
-    metrics_df: pd.DataFrame,
-    cfg: dict[str, Any],
-    save: bool = True,
-) -> plt.Figure:
-    """Bar chart of MMD per generation method."""
-    colors         = METHOD_COLORS
-    baseline_label = cfg["experiments"]["baseline_label"]
+def plot_grouped_bars(pivot: pd.DataFrame, ylabel: str, title: str, figures_dir, name: str,
+                      reference_line: float | None = None, reference_label: str = ""):
 
-    mmd_per_method = (
-        metrics_df.groupby("method")["mmd"].first().reset_index()
-        if "mmd" in metrics_df.columns
-        else pd.DataFrame(columns=["method", "mmd"])
-    )
-    mmd_per_method = mmd_per_method[mmd_per_method["method"] != baseline_label]
-    mmd_per_method = mmd_per_method.sort_values("mmd")
+    horizontal = len(pivot.index) > 6
 
-    fig, ax = plt.subplots(figsize=(7, 4))
-    bars = ax.bar(
-        mmd_per_method["method"],
-        mmd_per_method["mmd"],
-        color=[colors.get(m, "grey") for m in mmd_per_method["method"]],
-        alpha=0.85,
-        edgecolor="white",
-    )
-    for bar, v in zip(bars, mmd_per_method["mmd"]):
-        ax.text(
-            bar.get_x() + bar.get_width() / 2,
-            bar.get_height() + max(mmd_per_method["mmd"].max() * 0.01, 1e-5),
-            f"{v:.4f}",
-            ha="center", va="bottom", fontsize=12,
-        )
+    if horizontal:
+        fig, ax = plt.subplots(figsize=(9, 0.42 * pivot.size + 1.6))
+        pivot.iloc[::-1].plot(kind="barh", ax=ax, width=0.8, alpha=0.9, edgecolor="white")
+        ax.set_xlabel(ylabel)
+        ax.set_ylabel("")
+        if reference_line is not None:
+            ax.axvline(reference_line, color="grey", ls=":", lw=1.2, label=reference_label)
+    else:
+        fig, ax = plt.subplots(figsize=(min(13.0, 1.7 * len(pivot.index) + 3.0), 4.8))
+        pivot.plot(kind="bar", ax=ax, rot=20, width=0.8, alpha=0.9, edgecolor="white")
+        ax.set_xlabel("")
+        ax.set_ylabel(ylabel)
+        for label in ax.get_xticklabels():
+            label.set_ha("right")
+        if reference_line is not None:
+            ax.axhline(reference_line, color="grey", ls=":", lw=1.2, label=reference_label)
 
-    ax.set_ylabel("MMD^2 (RBF kernel)")
-    ax.set_xlabel("Generation method")
-    ax.set_title("MMD: synthetic vs real features", fontweight="bold")
-    plt.setp(ax.get_xticklabels(), rotation=15, ha="right")
-    plt.tight_layout()
+    ax.set_title(title)
+    ax.legend(bbox_to_anchor=(1.02, 1), loc="upper left", borderaxespad=0)
+    fig.tight_layout()
 
-    if save:
-        _save_fig(fig, "mmd_comparison", cfg)
-
+    save_figure(fig, name, figures_dir)
     return fig
-
-
-
-def _bar_chart(
-    ax: plt.Axes,
-    methods: list[str],
-    values: list[float],
-    colors: list[str],
-    ylabel: str,
-    subtitle: str,
-) -> None:
-    bars = ax.bar(methods, values, color=colors, alpha=0.85, edgecolor="white")
-    for bar, val in zip(bars, values):
-        ax.text(
-            bar.get_x() + bar.get_width() / 2,
-            bar.get_height() + max(values) * 0.01,
-            f"{val:.4f}",
-            ha="center", va="bottom", fontsize=12,
-        )
-    ax.set_ylabel(ylabel)
-    ax.set_title(f"{ylabel}\n{subtitle}", fontsize=15)
-    plt.setp(ax.get_xticklabels(), rotation=15, ha="right")
-
-
-def _save_fig(fig: plt.Figure, name: str, cfg: dict[str, Any]) -> None:
-    figures_dir = cfg["paths"]["figures_dir"]
-    Path(figures_dir).mkdir(parents=True, exist_ok=True)
-    out_path = Path(figures_dir) / f"{name}.png"
-    fig.savefig(out_path, dpi=200, bbox_inches="tight")
-    logger.info(f"Figure saved -> {out_path}")
