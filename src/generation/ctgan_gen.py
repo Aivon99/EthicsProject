@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 from typing import Any
-from pathlib import Path
 
 import pandas as pd
 from sdv.single_table import CTGANSynthesizer
-from sdv.metadata import SingleTableMetadata
 
 from src.generation.constraints import add_target_exclusivity_constraint
+from src.generation.io import resolve_n_samples, save_synthetic, seed_generator
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -15,50 +14,32 @@ logger = get_logger(__name__)
 
 def generate_ctgan(
     train_df: pd.DataFrame,
-    metadata: SingleTableMetadata,
-    cfg: dict[str, Any],
-    output_path: str | Path,
+    metadata,
+    cfg: dict,
+    output_path
 ) -> pd.DataFrame:
-    """Fit CTGAN on train_df, sample a synthetic dataset, and save it."""
-    method_cfg = cfg["generation"]["methods"]["ctgan"]
-    n_samples  = _resolve_n_samples(cfg, train_df)
-    seed       = cfg["seed"]
+    """Fit CTGAN on the training set, sample a synthetic dataset and save it."""
+    seed = seed_generator(cfg)
+    params = cfg["generation"]["methods"]["ctgan"]
+    n_samples = resolve_n_samples(cfg, train_df)
 
     logger.info(
         f"CTGAN: fitting on {len(train_df)} rows "
-        f"(epochs={method_cfg['epochs']}, "
-        f"batch_size={method_cfg['batch_size']}, "
-        f"seed={seed})..."
+        f"(epochs={params['epochs']}, batch_size={params['batch_size']}, seed={seed})"
     )
 
     synthesizer = CTGANSynthesizer(
         metadata=metadata,
-        epochs=method_cfg["epochs"],
-        batch_size=method_cfg["batch_size"],
+        epochs=params["epochs"],
+        batch_size=params["batch_size"],
         enable_gpu=False,
         verbose=True,
     )
-
     add_target_exclusivity_constraint(synthesizer, cfg)
-
     synthesizer.fit(train_df)
 
-    logger.info(f"CTGAN: sampling {n_samples} synthetic rows...")
+    logger.info(f"CTGAN: sampling {n_samples} rows")
     synthetic_df = synthesizer.sample(num_rows=n_samples)
 
-    _save(synthetic_df, output_path)
+    save_synthetic(synthetic_df, output_path, "CTGAN")
     return synthetic_df
-
-
-def _resolve_n_samples(cfg: dict, train_df: pd.DataFrame) -> int:
-    n = cfg["generation"].get("n_synthetic_samples")
-    if n is None:
-        return len(train_df)
-    return int(n)
-
-
-def _save(df: pd.DataFrame, path: str | Path) -> None:
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(path, index=False)
-    logger.info(f"CTGAN: synthetic dataset saved -> {path}  ({len(df)} rows)")
