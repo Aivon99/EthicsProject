@@ -1,52 +1,46 @@
 # Paths
 paths:
-
-  
-  # Reference dataset directory
-  # (from Aequitas collection on Zenodo: https://zenodo.org/records/17592007)
-  student_dataset_dir: student-dataset
-  raw_data: Data/original.csv  # working copy of the original Aequitas dataset
-
+  # Reference dataset from the Aequitas collection on Zenodo,
+  # https://zenodo.org/records/17592007
+  raw_data: Data/original.csv
   # If raw_data is missing locally, load_data() falls back to downloading it
   # from here (Google Drive share)
-  
   raw_data_url: "https://drive.google.com/file/d/15J7I1vzN4OQWvYqsSaHria-A8YEnR-Gt/view?usp=sharing"
 
-
-
-  # Goal 1 output: the preprocessed dataset used as input for Goal 2.
   processed_data: Data/processed.csv
   train_data:     Data/train.csv
   test_data:      Data/test.csv
 
   results_dir:   results
-  processed_dir: results/processed  
   figures_dir:   results/figures
   synthetic_dir: results/synthetic
-  experiments_dir: results/experiments
 
-#  Reproducibility 
-seed: 42  # my fav
+# Reproducibility
+seed: 42
 
-#  Target variable
-target:
-  score_column:  score_MAT         # continuous score used to build the target
-  percentile:    75                # positive class: score >= this percentile
-  column_name:   target_high_perf  # name of the binary column
+# The continuous score both tasks are built from.
+target_score_column: score_MAT
 
-  # Symmetric "underperformance" task 
-  # positive class = score <= this percentile. Built alongside target_high_perf
-  # in Notebook 01 so both tasks share one synthetic-generation run (Notebook 02).
-  
-  low_percentile:   25
-  low_column_name:  target_low_perf
+# The two prediction tasks.
+# The two labels are mutually exclusive by construction.
+# Following Marrero et al. (ECAI 2024), the same predictors are used for both tasks: holding
+# the features fixed is what isolates the effect of the task itself.
+tasks:
+  high_perf:
+    column:     target_high_perf
+    percentile: 75
+    tail:       upper
+    name:       excellence
+  low_perf:
+    column:     target_low_perf
+    percentile: 25
+    tail:       lower
+    name:       underperformance
 
-  # Dataset schema 
 dataset:
-  # Target column (must match target.column_name above)
-  target_column: target_high_perf
-
-  # Performance score columns
+  # Performance score columns are excluded from synthesis and from the feature 
+  # set: the target is derived from score_MAT, so keeping any of these would let
+  # a model reconstruct the label directly.
   performance_columns:
     - score_MAT
     - level_MAT
@@ -55,21 +49,51 @@ dataset:
     - score_ING
     - level_ING
 
-  # Protected attribute columns (circumstances C1-C12 from Marrero et. al.)
+  # Circumstances C1 to C12 of Marrero et al., plus the ESCS composite. These are the factors.
   protected_attributes:
     - s_gender                                           # C1
-    - s_birth_country                                    # C6 - proxy for immigrant status
     - f_mother_education_level                           # C2
     - f_father_education_level                           # C3
     - f_mother_occupation                                # C4
     - f_father_occupation                                # C5
+    - s_birth_country                                    # C6, proxy for immigrant status
+    - f_start_schooling_age                              # C7
     - f_extent_of_books_at_home                          # C8
     - f_frequency_of_see_adult_read                      # C9
     - p_public_or_private                                # C10
     - p_island                                           # C11
     - p_percentage_of_teachers_changed_school_last_year  # C12
-    - f_ESCS                                             # C13 - socioeconomic composite
+    - f_ESCS                                             # socioeconomic composite
 
+  # Group definitions from Table 2 of Marrero et al. 
+  # "privileged" is the socially advantaged side. 
+  protected_groups:
+    s_gender:
+      privileged: [MALE]
+    f_mother_education_level:                            # tertiary against the rest
+      privileged: [6.0, 7.0, 8.0, 9.0]
+    f_father_education_level:
+      privileged: [6.0, 7.0, 8.0, 9.0]
+    f_mother_occupation:                                 # high occupation against the rest
+      privileged: [4.0]
+    f_father_occupation:
+      privileged: [4.0]
+    s_birth_country:                                     # born in Spain against born abroad
+      privileged: [ESP]
+    f_start_schooling_age:                               # started before age three
+      privileged: [1.0]
+    f_extent_of_books_at_home:                           # most books at home against the rest
+      privileged: [1.0]
+    f_frequency_of_see_adult_read:                       # sees an adult read daily
+      privileged: [1.0]
+    p_public_or_private:                                 # private, mean ESCS 0.59 against -0.14
+      privileged: [1.0]
+    p_island:                                            # capital islands
+      privileged: [1.0, 4.0]
+    p_percentage_of_teachers_changed_school_last_year:   # almost no turnover
+      privileged: [1.0]
+    f_ESCS:
+      split: median                                      # above the median
 
   # Columns that are purely administrative identifiers
   id_columns:
@@ -81,65 +105,55 @@ dataset:
     - id_student_16_19
     - id_school_16_19
 
-  # Columns that are categorical
+  # Treated as categorical by the SDV metadata builder and by SMOTENC.
   categorical_columns:
     - s_gender
     - s_birth_country
     - f_frequency_of_see_adult_read
     - p_public_or_private
     - p_island
-    - target_low_perf  # binary; must be treated as categorical when it rides
-                        # along as a feature column during SMOTE generation
-    - target_high_perf  # symmetric case: rides along as a feature during the
-                         # smote_low_perf run (currently harmless only because
-                         # every low-perf-minority neighbour already has
-                         # target_high_perf=0 in the real data -- listing it
-                         # here removes the reliance on that coincidence)
+    - target_high_perf
+    - target_low_perf
 
 feature_selection:
   enabled: true
-  method: mutual_info  # mutual_info or f_classif or variance
-  k: 25                # number of non-sensitive columns to keep
-  random_state: null   # falls back to the top-level seed
+  method: mutual_info   # mutual_info, f_classif or variance
+  k: 25                 # number of non-sensitive columns to keep; protected attributes are always kept
+  random_state: null    # null falls back to the top level seed
+
 
 # Synthetic generation
-
 generation:
   # How many synthetic rows to produce per method
-  n_synthetic_samples: null  #  match the size of the training set
-
-  
-  run_low_perf_smote: true
+  n_synthetic_samples: null   # null matches the size of the training set
 
   methods:
     ctgan:
-      epochs:      300
-      batch_size:  500
-
+      epochs:     300
+      batch_size: 500
     tvae:
-      epochs:      300
-      batch_size:  500
-
-    gaussian_copula:
-      none: 0
-
+      epochs:     300
+      batch_size: 500
+    gaussian_copula: {}
     smote:
       k_neighbors: 5
 
-  
+  # Output directory under paths.synthetic_dir for each generated dataset.
   output_subdirs:
-    ctgan:            ctgan
-    tvae:             tvae
-    gaussian_copula:  copula
-    smote:            smote
-  
-    smote_low_perf:   smote_low_perf
+    ctgan:           ctgan
+    tvae:            tvae
+    gaussian_copula: copula
+    smote:           smote
+    smote_low_perf:  smote_low_perf
 
   output_filename_template: "synthetic_{method}.csv"
 
-#  TSTR Experiment Configuration
+  # Which generated datasets each task evaluates.
+  datasets_per_task:
+    high_perf: [ctgan, tvae, gaussian_copula, smote]
+    low_perf:  [ctgan, tvae, gaussian_copula, smote_low_perf]
+
 experiments:
-  # included as the first row ("real") in results.
   baseline_label: real
 
   utility_metrics:
@@ -150,31 +164,39 @@ experiments:
 
   classifiers:
     logistic_regression:
-      max_iter: 1000
-      C: 1.0
-      solver: lbfgs
+      max_iter:     1000
+      C:            1.0
+      solver:       lbfgs
       class_weight: balanced
 
     xgboost:
-      n_estimators: 200
-      max_depth: 4
-      learning_rate: 0.05
-      subsample: 0.8
+      n_estimators:     200
+      max_depth:        4
+      learning_rate:    0.05
+      subsample:        0.8
       colsample_bytree: 0.8
-      use_label_encoder: false
-      eval_metric: logloss
+      eval_metric:      logloss
       scale_pos_weight: auto
 
     mlp:
-      hidden_layer_sizes: [128, 64]
-      activation: relu
-      max_iter: 300
-      early_stopping: true
+      hidden_layer_sizes:  [128, 64]
+      activation:          relu
+      max_iter:            300
+      early_stopping:      true
       validation_fraction: 0.1
-      n_iter_no_change: 15
-      learning_rate_init: 0.001
-      batch_size: 256
+      n_iter_no_change:    15
+      learning_rate_init:  0.001
+      batch_size:          256
 
+fairness:
+  # Threshold for true positives in a group. 
+  # If a group has fewer true positives than this threshold,
+  # that group's TPR is too noisy to report.
+  min_odds_ratio_support: 10
+  # Thresholds used to flag a result as concerning.
+  dpd_threshold: 0.1
+  eod_threshold: 0.1
+  di_threshold:  0.8
 
 mitigation:
   enabled: true
@@ -182,14 +204,12 @@ mitigation:
     - equalized_odds
     - prejudice_remover
   equalized_odds:
-    grid_size: 1000   # ThresholdOptimizer search granularity
+    grid_size: 1000     # ThresholdOptimizer search granularity
   prejudice_remover:
-    eta: 1.0          # fairness regularisation strength (higher = fairer, less accurate)
-  random_state: null  # null -> falls back to the top-level seed
+    eta: 1.0            # higher means fairer and less accurate
+  random_state: null    # null falls back to the top level seed
 
-# MMD kernel settings
 mmd:
-  kernel: rbf        # radial basis function kernel
-  gamma: null        # null -> median heuristic (1 / (2 * median(pairwise distances)^2))
-  n_subsample: 2000  # subsample size for MMD computation
-  
+  kernel: rbf           # radial basis function kernel
+  gamma: null           # null uses the median heuristic
+  n_subsample: 2000
