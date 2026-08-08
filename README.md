@@ -1,4 +1,4 @@
-# Fairness and Utility Under Synthetic Data: Measuring what we lose when we anonymise
+# Fairness and Utility Under Synthetic Data: Measuring the Cost of Anonymisation
 
 > Exam project for the course "Ethics in Artificial Intelligence", Master's Degree in Artificial Intelligence, University of Bologna, a.y. 2025-2026.
 
@@ -15,8 +15,8 @@ predictive accuracy and, less visibly, fairness.
 This project measures that cost on a real educational dataset, under a **Train on Synthetic, Test
 on Real** protocol. We fit four generators (CTGAN, TVAE, Gaussian copula, SMOTE) on the real
 training set, train three classifiers (logistic regression, XGBoost, MLP) on each synthetic
-replacement, and score every model on the same held-out real students. The whole grid is then run
-twice, once predicting the top quarter of the score distribution and once the bottom quarter.
+training set, and every model is scored on the same held-out real students. The whole grid is then
+run twice, once predicting the top quarter of the score distribution and once the bottom quarter.
 
 The five questions the notebooks answer, in order:
 
@@ -39,11 +39,11 @@ for University Quality and Educational Evaluation (ACCUEE).
 ## Goals
 
 1. **Preprocessing (G1).** Clean the raw survey data, derive the two prediction targets from the
-   maths score (top quartile for excellence, bottom quartile for underperformance) and reduce
-   the surviving columns to the 25 most informative, keeping every protected attribute.
-2. **Synthetic generation (G2).** Replace the real training set with one synthetic copy per
-   technique (CTGAN, TVAE, Gaussian copula, SMOTE) and measure how far each copy drifts from the
-   real distribution.
+   maths score (top quartile for excellence, bottom quartile for underperformance) and reduce the
+   surviving columns to a 38-feature set: the 25 most informative non-sensitive columns plus the
+   13 protected attributes, which are kept regardless of rank.
+2. **Synthetic generation (G2).** Build a synthetic training set per technique (CTGAN, TVAE, Gaussian
+   copula, SMOTE) and measure how far each drifts from the real distribution.
 3. **TSTR evaluation (G3).** Train logistic regression, XGBoost and MLP on the real set and on
    each synthetic one, score them all on the same real test students, and read the utility and
    fairness cost of the substitution off the difference.
@@ -92,8 +92,8 @@ Install the dependencies in a virtual environment:
 
 ```
 python -m venv .venv
-.venv\Scripts\pip install -r requirements.txt     # Windows
-.venv/bin/pip install -r requirements.txt         # macOS / Linux
+.venv\Scripts\python -m pip install -r requirements.txt     # Windows
+.venv/bin/python -m pip install -r requirements.txt         # macOS / Linux
 ```
 
 Then run the notebooks in `notebook/` in numeric order, G1 through G5. **The order matters**: each one reads files the previous one wrote. Every notebook's first cell verifies that the installed packages match `requirements.txt` and stops with the list of what is missing if they do not.
